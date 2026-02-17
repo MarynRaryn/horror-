@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Prison Sentry VR</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script>
+      AFRAME.registerComponent('prison-game', {
+        init: function () {
+          this.gameStarted = false;
+          this.cellsChecked = 0;
+          this.flashlight = document.querySelector('#flashlight');
+          this.lobby = document.querySelector('#lobby');
+          this.hud = document.querySelector('#hud');
+          
+          // Start Game via Click
+          window.addEventListener('click', () => {
+            if (!this.gameStarted) {
+              this.startGame();
+            }
+          });
+        },
+
+        startGame: function() {
+          this.gameStarted = true;
+          this.lobby.setAttribute('visible', 'false');
+          this.lobby.setAttribute('position', '0 -10 0'); // Move lobby away
+          this.hud.setAttribute('value', 'Check the 4 Cells. Are they safe?');
+          
+          // Randomize Cell Contents: 0 = Safe, 1 = Monster
+          this.cellData = [Math.round(Math.random()), Math.round(Math.random()), 1, 0];
+          console.log("Prison Layout Generated:", this.cellData);
+        },
+
+        tick: function () {
+          if (!this.gameStarted) return;
+
+          let playerPos = document.querySelector('#rig').getAttribute('position');
+          
+          // Check proximity to specific cells (Simplified logic)
+          if (playerPos.z < -15 && this.cellsChecked < 4) {
+             this.hud.setAttribute('value', 'Find the exit at the end of the hall!');
+             this.hud.setAttribute('color', 'yellow');
+          }
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <a-scene prison-game>
+      
+      <a-entity id="lobby" position="0 1.5 3">
+        <a-text value="PRISON SENTRY VR" align="center" position="0 0.5 -2" color="red" width="6"></a-text>
+        <a-text value="CLICK TO ENTER THE WARDEN'S WING" align="center" position="0 0 -2" width="4"></a-text>
+        <a-box color="#222" position="0 -0.5 -2.1" width="4" height="2" depth="0.1"></a-box>
+      </a-entity>
+
+      <a-entity id="rig" position="0 0 5">
+        <a-camera wasd-controls look-controls>
+          <a-text id="hud" value="LOBBY" position="0 -0.5 -1" align="center" width="2" color="white"></a-text>
+          
+          <a-entity id="flashlight" 
+                    light="type: spot; angle: 20; intensity: 3; distance: 30; penumbra: 0.2; color: #fff" 
+                    position="0.5 -0.3 0">
+            <a-cylinder color="black" height="0.3" radius="0.05" rotation="90 0 0"></a-cylinder>
+          </a-entity>
+        </a-camera>
+      </a-entity>
+
+      <a-sky color="black"></a-sky>
+      <a-plane rotation="-90 0 0" width="10" height="50" color="#111"></a-plane> <a-plane rotation="90 0 0" position="0 4 0" width="10" height="50" color="#050505"></a-plane> <a-box position="-2.5 2 -10" width="0.2" height="4" depth="40" color="#333"></a-box>
+      
+      <a-entity position="-2 1.5 -2">
+        <a-box color="gray" opacity="0.3" width="1" height="2" depth="0.1" position="0 0 0.5"></a-box> <a-text value="CELL 101" position="0 1.2 0.6" width="2" align="center"></a-text>
+        <a-entity id="inmate1" position="0 -1 -1">
+            <a-cone color="black" radius-bottom="0.4" height="2"></a-cone>
+            <a-sphere color="red" radius="0.05" position="0 1.8 0.3"></a-sphere>
+        </a-entity>
+      </a-entity>
+
+      <a-box position="2.5 2 -10" width="0.2" height="4" depth="40" color="#333"></a-box>
+
+      <a-box id="exit" color="maroon" position="0 1.5 -25" width="2" height="3" depth="0.5">
+        <a-text value="EXIT" position="0 0 0.6" align="center"></a-text>
+      </a-box>
+
+    </a-scene>
+  </body>
+</html>
