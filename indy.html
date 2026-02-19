@@ -1,88 +1,2143 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Prison Sentry VR</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WARDEN VR: THE BLACK BLOCK</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script>
-      AFRAME.registerComponent('prison-game', {
-        init: function () {
-          this.gameStarted = false;
-          this.cellsChecked = 0;
-          this.flashlight = document.querySelector('#flashlight');
-          this.lobby = document.querySelector('#lobby');
-          this.hud = document.querySelector('#hud');
-          
-          // Start Game via Click
-          window.addEventListener('click', () => {
-            if (!this.gameStarted) {
-              this.startGame();
-            }
-          });
-        },
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Special Elite', serif; }
 
-        startGame: function() {
-          this.gameStarted = true;
-          this.lobby.setAttribute('visible', 'false');
-          this.lobby.setAttribute('position', '0 -10 0'); // Move lobby away
-          this.hud.setAttribute('value', 'Check the 4 Cells. Are they safe?');
-          
-          // Randomize Cell Contents: 0 = Safe, 1 = Monster
-          this.cellData = [Math.round(Math.random()), Math.round(Math.random()), 1, 0];
-          console.log("Prison Layout Generated:", this.cellData);
-        },
+        #ui-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
 
-        tick: function () {
-          if (!this.gameStarted) return;
-
-          let playerPos = document.querySelector('#rig').getAttribute('position');
-          
-          // Check proximity to specific cells (Simplified logic)
-          if (playerPos.z < -15 && this.cellsChecked < 4) {
-             this.hud.setAttribute('value', 'Find the exit at the end of the hall!');
-             this.hud.setAttribute('color', 'yellow');
-          }
+        #timer-container {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(20,0,0,0.93); border: 3px solid #8b0000; padding: 10px 30px;
+            text-align: center; box-shadow: 0 0 20px rgba(139,0,0,0.5);
         }
-      });
-    </script>
-  </head>
-  <body>
-    <a-scene prison-game>
-      
-      <a-entity id="lobby" position="0 1.5 3">
-        <a-text value="PRISON SENTRY VR" align="center" position="0 0.5 -2" color="red" width="6"></a-text>
-        <a-text value="CLICK TO ENTER THE WARDEN'S WING" align="center" position="0 0 -2" width="4"></a-text>
-        <a-box color="#222" position="0 -0.5 -2.1" width="4" height="2" depth="0.1"></a-box>
-      </a-entity>
+        #clock-hud { font-family: 'Orbitron', sans-serif; font-size: 42px; color: #ff0000; text-shadow: 0 0 10px #ff0000; margin: 0; }
+        #shift-label { font-size: 12px; color: #8b0000; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 5px; }
+        #progress-wire { width: 200px; height: 4px; background: #333; margin: 10px auto 0; }
+        #progress-fill { width: 0%; height: 100%; background: #ff0000; box-shadow: 0 0 8px #ff0000; transition: width 0.2s; }
 
-      <a-entity id="rig" position="0 0 5">
-        <a-camera wasd-controls look-controls>
-          <a-text id="hud" value="LOBBY" position="0 -0.5 -1" align="center" width="2" color="white"></a-text>
-          
-          <a-entity id="flashlight" 
-                    light="type: spot; angle: 20; intensity: 3; distance: 30; penumbra: 0.2; color: #fff" 
-                    position="0.5 -0.3 0">
-            <a-cylinder color="black" height="0.3" radius="0.05" rotation="90 0 0"></a-cylinder>
-          </a-entity>
-        </a-camera>
-      </a-entity>
+        /* Phase announcement banner */
+        #phase-banner {
+            position: absolute; top: 140px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.92); border: 2px solid #555; padding: 10px 28px;
+            color: #c8b882; font-size: 14px; letter-spacing: 3px; text-align: center;
+            text-transform: uppercase; display: none; white-space: nowrap;
+        }
+        #phase-banner.phase-inspect { border-color: #446688; color: #88aacc; }
+        #phase-banner.phase-report  { border-color: #886644; color: #ccaa66; }
+        #phase-banner.phase-vote    { border-color: #884444; color: #ff6666; animation: pulsered 1.2s infinite; }
 
-      <a-sky color="black"></a-sky>
-      <a-plane rotation="-90 0 0" width="10" height="50" color="#111"></a-plane> <a-plane rotation="90 0 0" position="0 4 0" width="10" height="50" color="#050505"></a-plane> <a-box position="-2.5 2 -10" width="0.2" height="4" depth="40" color="#333"></a-box>
-      
-      <a-entity position="-2 1.5 -2">
-        <a-box color="gray" opacity="0.3" width="1" height="2" depth="0.1" position="0 0 0.5"></a-box> <a-text value="CELL 101" position="0 1.2 0.6" width="2" align="center"></a-text>
-        <a-entity id="inmate1" position="0 -1 -1">
-            <a-cone color="black" radius-bottom="0.4" height="2"></a-cone>
-            <a-sphere color="red" radius="0.05" position="0 1.8 0.3"></a-sphere>
+        @keyframes pulsered { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        #stats-hud {
+            top: 20px; left: 20px; position: absolute; background: rgba(0,0,0,0.85);
+            border: 1px solid #444; color: #c8b882; padding: 15px; font-size: 13px; line-height: 1.8;
+        }
+        #log-hud {
+            bottom: 20px; left: 20px; width: 500px; position: absolute; font-size: 13px;
+            border-left: 5px solid #8b0000; background: rgba(10,0,0,0.95); padding: 15px; color: #eee;
+            max-height: 160px; overflow: hidden;
+        }
+        .log-line { margin: 2px 0; padding: 2px 0; border-bottom: 1px solid #1a1a1a; }
+        .log-good { color: #44ff44; }
+        .log-bad  { color: #ff4444; }
+        .log-info { color: #c8b882; }
+        .log-warn { color: #ffaa00; }
+        .log-scp  { color: #aa00ff; }
+
+        /* Intel digit reveal */
+        #intel-reveal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            background: rgba(0,0,0,0.97); border: 3px solid #8b0000; padding: 40px 60px;
+            text-align: center; display: none; pointer-events: auto;
+        }
+        #intel-reveal h2 { color: #ff0000; font-family: 'Orbitron', sans-serif; font-size: 18px; margin: 0 0 16px; letter-spacing: 4px; }
+        #intel-reveal .digit-line { font-family: 'Orbitron', sans-serif; font-size: 64px; color: #c8b882; letter-spacing: 8px; margin: 12px 0; }
+        #intel-reveal .hint-text { color: #888; font-size: 12px; letter-spacing: 2px; margin-top: 8px; }
+        #intel-reveal button { margin-top: 20px; background: #1a0000; border: 1px solid #8b0000; color: #c8b882; padding: 10px 28px; cursor: pointer; font-size: 14px; letter-spacing: 2px; }
+
+        /* Office report */
+        #office-report {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: 720px; max-height: 85vh; background: #b8a978; color: #111;
+            padding: 40px; border: 5px double #333; z-index: 100; box-shadow: 0 0 100px #000;
+            pointer-events: auto; overflow-y: auto;
+        }
+        #office-report h1 { text-align: center; text-decoration: underline; font-size: 22px; margin-bottom: 20px; }
+        .report-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #666; font-size: 13px; }
+        .report-row .rname { font-weight: bold; flex: 1; }
+        .report-row .rclaim { flex: 1; color: #333; }
+        .report-row .rpct { font-family: 'Orbitron', sans-serif; font-size: 16px; flex: 0 0 60px; text-align: right; }
+        .pct-high { color: #8b0000; }
+        .pct-low  { color: #004400; }
+        .pct-mid  { color: #664400; }
+        .report-note { font-size: 11px; color: #555; font-style: italic; margin-top: 4px; }
+        .close-btn { display: block; margin-top: 24px; padding: 15px; background: #111; color: #c8b882; border: none; cursor: pointer; width: 100%; font-size: 18px; font-family: 'Special Elite', serif; }
+        .close-btn:hover { background: #222; }
+        #report-locked { display: none; color: #8b0000; text-align: center; font-size: 16px; letter-spacing: 2px; padding: 20px; }
+
+        /* Jumpscare overlay */
+        #jumpscare {
+            position: fixed; inset: 0; background: #000; z-index: 9999;
+            display: none; align-items: center; justify-content: center; flex-direction: column;
+        }
+        #jumpscare-text {
+            font-family: 'Orbitron', sans-serif; font-size: 48px; color: #ff0000;
+            text-shadow: 0 0 40px #ff0000, 0 0 80px #ff0000; text-align: center;
+            animation: jshake 0.08s infinite;
+        }
+        @keyframes jshake { 0%{transform:translate(-3px,2px)} 25%{transform:translate(3px,-2px)} 50%{transform:translate(-2px,-3px)} 75%{transform:translate(2px,3px)} 100%{transform:translate(0,0)} }
+        #jumpscare-sub { color: #ff6600; font-size: 18px; margin-top: 20px; letter-spacing: 4px; }
+        #jumpscare button { margin-top: 40px; background: #1a0000; border: 2px solid #8b0000; color: #fff; padding: 14px 40px; font-size: 18px; cursor: pointer; }
+
+        /* SCP warning */
+        #scp-warning {
+            position: absolute; bottom: 200px; right: 20px;
+            background: rgba(40,0,60,0.95); border: 1px solid #660088; color: #cc44ff;
+            padding: 12px 18px; font-size: 12px; letter-spacing: 2px; display: none;
+            max-width: 220px; line-height: 1.7;
+        }
+
+        #crosshair { position: fixed; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; transform: translate(-50%,-50%); pointer-events: none; }
+
+        /* Vote lock overlay */
+        #vote-lock {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            background: rgba(0,0,0,0.93); border: 2px solid #884444; padding: 30px 50px;
+            color: #ff6666; text-align: center; display: none; letter-spacing: 3px;
+            pointer-events: auto; font-size: 14px; min-width: 280px; position: relative;
+        }
+        #vote-lock-x {
+            position: absolute; top: 8px; right: 12px;
+            color: #884444; font-size: 20px; cursor: pointer; line-height: 1;
+        }
+        #vote-lock-x:hover { color: #ff6666; }
+
+        #vote-status { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.85); border: 1px solid #555; color: #c8b882; padding: 14px; font-size: 13px; line-height: 1.8; }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div id="timer-container">
+        <div id="shift-label">Shift Deadline Protocol</div>
+        <div id="clock-hud">17:00</div>
+        <div id="progress-wire"><div id="progress-fill"></div></div>
+    </div>
+
+    <div id="phase-banner">☀ INSPECT THE CELLS</div>
+
+    <div id="stats-hud">
+        DAY: <span id="day-val">1</span><br>
+        INTEL LVL: <span id="intel-val">0</span><br>
+        QUOTA: <span id="quota-val">0/2</span>
+    </div>
+
+    <div id="vote-status" style="display:none">
+        ⚔ EXECUTED: <span id="v-kill">0</span>/1<br>
+        🗝 RELEASED: <span id="v-free">0</span>/1
+    </div>
+
+    <div id="log-hud">
+  <div class="log-line log-info"><b>SHIFT BRIEFING —</b> Execute 1 liar. Release 1 innocent. Before midnight. Judgment window: 21:00–24:00.</div>
+</div>
+
+    <div id="scp-warning"></div>
+
+    <div id="intel-reveal">
+        <h2>INTEL ACQUIRED</h2>
+        <div class="digit-line" id="reveal-digits"></div>
+        <div class="hint-text">Prisoner code fragment — piece together the truth</div>
+        <button onclick="closeReveal()">CONTINUE</button>
+    </div>
+
+    <div id="vote-lock">
+        <span id="vote-lock-x" onclick="document.getElementById('vote-lock').style.display='none'">✕</span>
+        <div style="font-size:22px;margin-bottom:10px">🔒 JUDGMENT LOCKED</div>
+        <div id="lock-reason">Judgment begins at 21:00</div>
+    </div>
+
+    <div id="crosshair"></div>
+<button id="vr-enter-btn"
+  onclick="document.querySelector('a-scene').enterVR()"
+  style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.85);border:2px solid #8b0000;color:#c8b882;
+  padding:10px 28px;font-size:13px;letter-spacing:3px;cursor:pointer;
+  pointer-events:auto;font-family:'Special Elite',serif;z-index:20;">
+  🥽 ENTER VR
+</button>
+<button id="briefing-btn" onclick="document.getElementById('briefing-panel').style.display='flex'"
+  style="position:absolute;bottom:20px;right:20px;background:rgba(0,0,0,0.85);border:1px solid #666;color:#c8b882;padding:8px 16px;font-size:12px;letter-spacing:2px;cursor:pointer;pointer-events:auto;font-family:'Special Elite',serif;">
+  📋 BRIEFING
+</button>
+</div>
+
+<!-- Briefing Panel -->
+<div id="briefing-panel" style="display:flex;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;background:rgba(0,0,0,0.92);">
+  <div style="background:#111;border:3px double #8b0000;padding:40px;max-width:640px;width:90%;max-height:90vh;overflow-y:auto;font-family:'Special Elite',serif;color:#c8b882;position:relative;">
+    <div style="font-family:'Orbitron',sans-serif;font-size:20px;color:#ff0000;letter-spacing:4px;text-align:center;margin-bottom:24px;border-bottom:1px solid #333;padding-bottom:16px;">
+      WARDEN ORIENTATION
+    </div>
+
+    <p style="color:#888;font-size:11px;letter-spacing:2px;margin-bottom:20px">CLASSIFICATION: LEVEL-2 PERSONNEL ONLY</p>
+
+    <div style="font-size:14px;line-height:1.9;color:#bbb">
+
+      <p style="color:#ff6600;margin-bottom:6px">◈ WHAT YOU ARE DOING</p>
+      <p>Every shift you must judge two prisoners before midnight — execute one liar and release one innocent. If you get it wrong, you are terminated. If you miss the deadline, you are terminated.</p>
+
+      <p style="color:#ff6600;margin-top:18px;margin-bottom:6px">◈ THE TIME SCHEDULE</p>
+      <p><b style="color:#88aacc">17:00 – 19:00</b> &nbsp;Walk the cell block. Look at every prisoner closely. Look at their body, their clothes, what is on the floor near them. The truth is physical.</p>
+      <p><b style="color:#ccaa66">19:00 – 21:00</b> &nbsp;The Intel Terminal at the end of the corridor opens. Read the report. It will show you a suspicion percentage for each prisoner. This number is a hint — not a verdict. You still have to decide.</p>
+      <p><b style="color:#ff6666">21:00 – 24:00</b> &nbsp;Judgment window is open. Approach a cell and press EXECUTE or RELEASE. You get one of each per night. If you do it wrong, it ends immediately.</p>
+
+      <p style="color:#ff6600;margin-top:18px;margin-bottom:6px">◈ HOW TO SPOT A LIE — WHAT TO LOOK FOR</p>
+
+      <p><b style="color:#ddd">SICK (red spots on body)</b><br>
+      A real sick prisoner has infection spots on their back. You need to walk around to the side of the cell and look through the bars to see their back. If there is no spots visible from the back, they may be faking.<br>
+      <span style="color:#ff4444">Important — if you see a red crayon lying on the floor near the prisoner's feet, it means they drew the spots on themselves. That prisoner is lying and must be executed.</span></p>
+
+      <p style="margin-top:12px"><b style="color:#ddd">STARVING (thin or fat body)</b><br>
+      A prisoner claiming starvation should look visibly thin and bony. If they claim to be starving but have a wide, well-fed body, they are lying.</p>
+
+      <p style="margin-top:12px"><b style="color:#ddd">HOMELESS (torn clothing)</b><br>
+      A genuine homeless prisoner arrives in rags — torn fabric strips hanging off their uniform. If their uniform is clean and intact, they are lying about living on the streets.</p>
+
+      <p style="margin-top:12px"><b style="color:#ddd">INJURED (arm sling)</b><br>
+      A real injury shows a visible white cast and sling on their left arm. If they claim injury but both arms are bare and free, they are not injured.</p>
+
+      <p style="margin-top:12px"><b style="color:#ddd">WITNESS (folded paper in pocket)</b><br>
+      A genuine witness will have a folded document tucked into their chest pocket — evidence they are carrying. If they claim to be a witness but carry nothing, they are lying.</p>
+
+      <p style="margin-top:12px"><b style="color:#ddd">POLITICAL (red badge)</b><br>
+      A real political prisoner will be wearing a small red badge with an X on it — a banned insignia they refuse to remove. If they claim political persecution but wear no badge, they are lying.</p>
+
+      <p style="color:#ff6600;margin-top:18px;margin-bottom:6px">◈ WHAT THE SUSPICION NUMBER MEANS</p>
+      <p>The report shows a percentage like 73% or 12%. A high number means the file system flagged something inconsistent. A low number means nothing suspicious was found on intake. Neither is proof. A cunning prisoner can score 20% and still be lying. Use your eyes.</p>
+
+      <p style="color:#ff6600;margin-top:18px;margin-bottom:6px">◈ TIMED CLUES — WATCH CAREFULLY</p>
+      <p>Some prisoners have clues that appear and disappear. A <b style="color:#ddd">REFORMED</b> prisoner who claims to have left gang life may have a tattoo on their forearm that fades in and out — it only shows for a few seconds at a time. Watch and wait.<br>
+      A <b style="color:#ddd">MEDIC</b> prisoner claiming to be a real doctor will have a white bandage wrap on their wrist — but it flickers and vanishes briefly. Look at their left wrist and be patient.<br>
+      A <b style="color:#ddd">TRADER</b> prisoner keeps a small gold coin near their foot — but it is tiny and flat on the floor. Look down when you are close to the bars.</p>
+
+      <p style="color:#ff6600;margin-top:18px;margin-bottom:6px">◈ THE ENTITY</p>
+      <p>Something in this facility is not a prisoner. It will enter the cell block at 21:00. Do not look at it directly. Complete your quota before it reaches you.</p>
+
+    </div>
+
+    <button onclick="document.getElementById('briefing-panel').style.display='none'"
+      style="display:block;width:100%;margin-top:28px;padding:14px;background:#1a0000;border:1px solid #8b0000;color:#c8b882;font-size:16px;letter-spacing:3px;cursor:pointer;font-family:'Special Elite',serif;">
+      ▶ BEGIN SHIFT
+    </button>
+  </div>
+</div>
+
+<!-- ════ DAY 5: INTAKE SCANNER PANEL ════ -->
+<div id="intake-panel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:300;background:#0a0e0a;border:3px solid #1a4a1a;padding:0;width:560px;max-height:88vh;
+  overflow-y:auto;font-family:'Special Elite',serif;color:#88cc88;box-shadow:0 0 60px #001a00;">
+
+  <!-- Header -->
+  <div style="background:#061006;border-bottom:2px solid #1a4a1a;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-family:'Orbitron',sans-serif;font-size:14px;color:#44ff44;letter-spacing:3px;">INTAKE TERMINAL</div>
+    <div style="font-size:11px;color:#446644;letter-spacing:2px;">DAY <span id="intake-day-label">5</span></div>
+  </div>
+
+  <!-- Arrivals queue -->
+  <div style="padding:16px 24px;border-bottom:1px solid #1a3a1a;">
+    <div style="font-size:11px;color:#446644;letter-spacing:2px;margin-bottom:10px;">CURRENT ARRIVAL</div>
+    <div id="intake-arrival-info" style="font-size:13px;line-height:2;color:#aaddaa;">
+      No arrival pending.
+    </div>
+  </div>
+
+  <!-- Scanner readings -->
+  <div style="padding:16px 24px;border-bottom:1px solid #1a3a1a;">
+    <div style="font-size:11px;color:#446644;letter-spacing:2px;margin-bottom:14px;">BIOMETRIC SCAN</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+      <div style="background:#060e06;border:1px solid #1a3a1a;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:#446644;letter-spacing:2px;margin-bottom:6px;">HEART RATE</div>
+        <div id="intake-bpm" style="font-family:'Orbitron',sans-serif;font-size:36px;color:#44ff44;text-shadow:0 0 10px #44ff44;">---</div>
+        <div style="font-size:10px;color:#334433;margin-top:4px;">BPM  |  NORMAL: 60–100</div>
+        <div id="intake-bpm-bar" style="height:4px;background:#1a3a1a;margin-top:8px;border-radius:2px;">
+          <div id="intake-bpm-fill" style="height:100%;width:0%;background:#44ff44;border-radius:2px;transition:width 0.4s;"></div>
+        </div>
+      </div>
+
+      <div style="background:#060e06;border:1px solid #1a3a1a;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:#446644;letter-spacing:2px;margin-bottom:6px;">TEMPERATURE</div>
+        <div id="intake-temp" style="font-family:'Orbitron',sans-serif;font-size:36px;color:#44ff44;text-shadow:0 0 10px #44ff44;">--.-</div>
+        <div style="font-size:10px;color:#334433;margin-top:4px;">°C  |  NORMAL: 36.1–37.2</div>
+        <div id="intake-temp-bar" style="height:4px;background:#1a3a1a;margin-top:8px;border-radius:2px;">
+          <div id="intake-temp-fill" style="height:100%;width:0%;background:#44ff44;border-radius:2px;transition:width 0.4s;"></div>
+        </div>
+      </div>
+
+    </div>
+    <div id="intake-scan-note" style="margin-top:12px;font-size:12px;color:#557755;font-style:italic;min-height:18px;"></div>
+  </div>
+
+  <!-- Decision buttons -->
+  <div id="intake-decision" style="padding:16px 24px;display:none;gap:14px;justify-content:center;">
+    <button onclick="intakeDecision(true)"
+      style="flex:1;padding:14px;background:#052005;border:2px solid #1a8a1a;color:#44ff44;font-size:15px;letter-spacing:2px;cursor:pointer;font-family:'Special Elite',serif;">
+      ✓ ADMIT TO CELL
+    </button>
+    <button onclick="intakeDecision(false)"
+      style="flex:1;padding:14px;background:#200505;border:2px solid #8a1a1a;color:#ff6666;font-size:15px;letter-spacing:2px;cursor:pointer;font-family:'Special Elite',serif;">
+      ✕ REJECT
+    </button>
+  </div>
+  <div id="intake-waiting" style="padding:16px 24px;text-align:center;color:#446644;font-size:13px;letter-spacing:2px;">
+    Scanning in progress...
+  </div>
+
+  <!-- Today's intake log -->
+  <div style="padding:14px 24px;border-top:1px solid #1a3a1a;">
+    <div style="font-size:11px;color:#446644;letter-spacing:2px;margin-bottom:8px;">TODAY'S INTAKE LOG</div>
+    <div id="intake-log" style="font-size:12px;color:#557755;line-height:1.9;max-height:100px;overflow-y:auto;"></div>
+  </div>
+
+  <div style="padding:12px 24px;border-top:1px solid #1a3a1a;text-align:center;">
+    <button onclick="document.getElementById('intake-panel').style.display='none'"
+      style="background:transparent;border:1px solid #334433;color:#446644;padding:8px 24px;cursor:pointer;font-size:12px;letter-spacing:2px;font-family:'Special Elite',serif;">
+      RETURN TO BLOCK
+    </button>
+  </div>
+</div>
+
+<!-- Infection warning overlay -->
+<div id="infection-warning" style="display:none;position:fixed;top:20px;right:20px;z-index:500;
+  background:rgba(40,0,0,0.95);border:2px solid #8b0000;padding:14px 18px;
+  color:#ff6666;font-size:12px;letter-spacing:2px;max-width:220px;line-height:1.7;
+  font-family:'Special Elite',serif;pointer-events:none;">
+</div>
+
+<!-- Office Report -->
+<div id="office-report">
+    <h1>MINISTRY INTEL: LIVE FEED</h1>
+    <div id="report-locked">⚠ REPORT NOT AVAILABLE UNTIL 19:00 ⚠</div>
+    <div id="report-text"></div>
+    <button class="close-btn" onclick="closeReport()">RETURN TO POST</button>
+</div>
+
+<!-- Jumpscare -->
+<div id="jumpscare">
+    <div id="jumpscare-text">QUOTA NOT MET</div>
+    <div id="jumpscare-sub" id="js-sub">YOU FAILED THE PROTOCOL</div>
+    <button onclick="location.reload()">TRY AGAIN</button>
+</div>
+
+<a-scene
+    renderer="antialias: true"
+    raycaster="objects: .clickable"
+    cursor="rayOrigin: mouse"
+    vr-mode-ui="enabled: true"
+    webxr="optionalFeatures: local-floor, bounded-floor, hand-tracking">
+    <a-sky id="sky" color="#020202"></a-sky>
+    <a-light type="ambient" color="#444" intensity="0.6"></a-light>
+
+    <a-plane position="0 0 -50" rotation="-90 0 0" width="100" height="250" color="#111"></a-plane>
+    <a-plane position="0 10 -50" rotation="90 0 0"  width="100" height="250" color="#050505"></a-plane>
+
+    <!-- Corridor walls -->
+    <a-box position="-14 5 -50" width="1" height="12" depth="250" color="#111" material="roughness:1"></a-box>
+    <a-box position="14 5 -50"  width="1" height="12" depth="250" color="#111" material="roughness:1"></a-box>
+
+    <a-entity id="cell-block"></a-entity>
+
+    <!-- Intel terminal at end of corridor -->
+    <a-entity position="0 0 -95">
+        <a-box position="0 4 0" width="28" height="14" depth="1" color="#0a0a0a"></a-box>
+        <a-box class="clickable" data-action="open-office" position="0 1.2 3.5" width="8" height="0.4" depth="4" color="#2b1d0e"></a-box>
+        <a-text value="INTEL TERMINAL" position="0 3.5 3.6" align="center" width="12" color="#ff0000"></a-text>
+        <a-light type="point" color="#ff2200" intensity="0.4" distance="12" position="0 3 1"></a-light>
+    </a-entity>
+
+    <!-- ════ DAY 5: INTAKE DESK in middle of corridor ════ -->
+    <a-entity id="intake-zone" visible="false" position="0 0 0">
+        <!-- Desk surface -->
+        <a-box position="0 1.0 -2" width="4" height="0.12" depth="1.8" color="#1a1a10" material="roughness:1"></a-box>
+        <!-- Desk legs -->
+        <a-box position="-1.8 0.5 -2" width="0.1" height="1.0" depth="0.1" color="#111"></a-box>
+        <a-box position=" 1.8 0.5 -2" width="0.1" height="1.0" depth="0.1" color="#111"></a-box>
+        <a-box position="-1.8 0.5 -2.8" width="0.1" height="1.0" depth="0.1" color="#111"></a-box>
+        <a-box position=" 1.8 0.5 -2.8" width="0.1" height="1.0" depth="0.1" color="#111"></a-box>
+
+        <!-- Heartbeat monitor — left side of desk -->
+        <a-box position="-1.2 1.42 -2.2" width="0.55" height="0.38" depth="0.28" color="#0a1a0a" material="roughness:1"></a-box>
+        <!-- Screen glow -->
+        <a-plane position="-1.2 1.44 -2.06" width="0.44" height="0.26" color="#001a00"
+            material="emissive:#003300;emissiveIntensity:0.6"></a-plane>
+        <a-text id="bpm-3d-display" value="BPM: ---" position="-1.38 1.45 -2.04"
+            color="#44ff44" width="1.2" font="https://cdn.aframe.io/fonts/Exo2Bold.fnt"></a-text>
+        <a-text value="CARDIAC" position="-1.38 1.36 -2.04" color="#226622" width="0.9"></a-text>
+
+        <!-- Temperature probe — right side -->
+        <a-box position="1.1 1.42 -2.2" width="0.48" height="0.38" depth="0.28" color="#0a100a" material="roughness:1"></a-box>
+        <a-plane position="1.1 1.44 -2.06" width="0.38" height="0.26" color="#001500"
+            material="emissive:#002800;emissiveIntensity:0.6"></a-plane>
+        <a-text id="temp-3d-display" value="TEMP: --.-" position="0.92 1.45 -2.04"
+            color="#44ff44" width="1.1" font="https://cdn.aframe.io/fonts/Exo2Bold.fnt"></a-text>
+        <a-text value="THERMAL" position="0.93 1.36 -2.04" color="#226622" width="0.9"></a-text>
+
+        <!-- Probe wand on desk surface -->
+        <a-cylinder position="0.3 1.1 -2.1" radius="0.025" height="0.5" color="#2a2a2a" rotation="0 0 80"></a-cylinder>
+        <a-sphere position="0.55 1.12 -2.1" radius="0.04" color="#334433"></a-sphere>
+
+        <!-- Green ADMIT / Red REJECT buttons on desk -->
+        <a-box class="clickable" data-action="intake-admit" position="-0.5 1.1 -1.5"
+            width="0.55" height="0.1" depth="0.35" color="#0a3a0a"
+            animation__h="property:color;to:#1a6a1a;startEvents:mouseenter;endEvents:mouseleave;dur:80"></a-box>
+        <a-text value="ADMIT" position="-0.72 1.17 -1.5" color="#44ff44" width="1.0"></a-text>
+
+        <a-box class="clickable" data-action="intake-reject" position="0.5 1.1 -1.5"
+            width="0.55" height="0.1" depth="0.35" color="#3a0a0a"
+            animation__h="property:color;to:#6a1a1a;startEvents:mouseenter;endEvents:mouseleave;dur:80"></a-box>
+        <a-text value="REJECT" position="0.28 1.17 -1.5" color="#ff6666" width="1.0"></a-text>
+
+        <!-- Open terminal button -->
+        <a-box class="clickable" data-action="open-intake" position="0 1.1 -2.8"
+            width="1.2" height="0.1" depth="0.3" color="#0a1a18"
+            animation__h="property:color;to:#1a3a30;startEvents:mouseenter;endEvents:mouseleave;dur:80"></a-box>
+        <a-text value="SCANNER TERMINAL" position="-0.78 1.17 -2.8" color="#44aaaa" width="1.6"></a-text>
+
+        <!-- Intake subject waiting area (small marked zone) -->
+        <a-plane position="0 0.01 1.5" rotation="-90 0 0" width="2" height="2" color="#0a1a0a"
+            material="emissive:#040a04;emissiveIntensity:0.3"></a-plane>
+        <a-text value="STAND HERE" position="-0.5 0.05 1.5" rotation="-90 0 0" color="#226622" width="1.2"></a-text>
+
+        <!-- Arrival subject (person standing at desk) -->
+        <a-entity id="intake-subject" position="0 0 2" visible="false">
+            <!-- Simple silhouette — not a prisoner yet -->
+            <a-box position="0 1.4 0" width="0.6" height="0.6" depth="0.3" color="#2a2a2a"></a-box>
+            <a-box position="0 1.0 0" width="0.55" height="0.4" depth="0.3" color="#2a2a2a"></a-box>
+            <a-sphere position="0 1.85 0" radius="0.22" color="#c8a878"></a-sphere>
         </a-entity>
-      </a-entity>
 
-      <a-box position="2.5 2 -10" width="0.2" height="4" depth="40" color="#333"></a-box>
+        <!-- Ambient green light over desk -->
+        <a-light type="point" color="#003300" intensity="0.5" distance="6" position="0 3 -2"></a-light>
+    </a-entity>
 
-      <a-box id="exit" color="maroon" position="0 1.5 -25" width="2" height="3" depth="0.5">
-        <a-text value="EXIT" position="0 0 0.6" align="center"></a-text>
-      </a-box>
+    <!-- SCP entity — lurks at end of corridor -->
+    <a-entity id="scp-entity" position="0 1.6 -92" visible="false">
+        <!-- SCP-shaped silhouette: tall, hunched, wrong proportions -->
+        <a-box position="0 1.8 0" width="0.9" height="1.4" depth="0.5" color="#111"></a-box>
+        <a-sphere position="0 2.7 0" radius="0.28" color="#0a0a0a"></a-sphere>
+        <!-- Long arms hanging to floor -->
+        <a-box position="-0.7 1.0 0" width="0.12" height="2.2" depth="0.12" rotation="0 0 15" color="#0d0d0d"></a-box>
+        <a-box position="0.7  1.0 0" width="0.12" height="2.2" depth="0.12" rotation="0 0 -15" color="#0d0d0d"></a-box>
+        <!-- Eyes — two faint red spheres -->
+        <a-sphere position="-0.09 2.74 0.23" radius="0.04" color="#ff0000" material="emissive:#ff0000;emissiveIntensity:0.8"></a-sphere>
+        <a-sphere position=" 0.09 2.74 0.23" radius="0.04" color="#ff0000" material="emissive:#ff0000;emissiveIntensity:0.8"></a-sphere>
+        <a-light type="point" color="#330000" intensity="0.6" distance="8" position="0 2 0"></a-light>
+    </a-entity>
 
-    </a-scene>
-  </body>
+    <!-- ════ PLAYER RIG — desktop + VR ════ -->
+    <a-entity id="rig" position="0 1.6 20">
+
+        <!-- Camera with desktop look + WASD -->
+        <a-entity id="head" camera look-controls wasd-controls="acceleration:80">
+            <a-light type="spot" intensity="1.2" angle="25" distance="40" color="#fff"></a-light>
+
+            <!-- VR HUD quad — attached to camera, toggled by left controller menu button -->
+            <!-- Shows in front of face when VR GUI is open, invisible by default -->
+            <a-entity id="vr-hud" position="0 0 -0.55" visible="false">
+                <!-- Background plane -->
+                <a-plane width="0.7" height="0.48" color="#0a0806"
+                    material="opacity:0.95;transparent:true;side:double"></a-plane>
+                <!-- Border -->
+                <a-plane width="0.71" height="0.49" color="#3a2010" position="0 0 -0.002"
+                    material="opacity:0.8;transparent:true;side:double"></a-plane>
+
+                <!-- Title bar -->
+                <a-plane width="0.7" height="0.06" color="#1a0800" position="0 0.21 0.003"
+                    material="opacity:1;side:double"></a-plane>
+                <a-text id="vr-hud-title" value="WARDEN SYSTEM" position="-0.32 0.208 0.005"
+                    width="0.7" color="#c8b882" wrap-count="30" align="left"></a-text>
+
+                <!-- Clock -->
+                <a-text id="vr-clock" value="17:00" position="-0.32 0.14 0.004"
+                    width="0.55" color="#ff4444" wrap-count="20"
+                    font="https://cdn.aframe.io/fonts/Exo2Bold.fnt"></a-text>
+                <a-text id="vr-day" value="DAY 1" position="0.08 0.14 0.004"
+                    width="0.35" color="#c8b882" wrap-count="12" align="left"></a-text>
+
+                <!-- Phase banner -->
+                <a-text id="vr-phase" value="INSPECT THE CELLS" position="-0.32 0.09 0.004"
+                    width="0.65" color="#88aacc" wrap-count="32" align="left"></a-text>
+
+                <!-- Divider -->
+                <a-plane width="0.65" height="0.003" color="#3a2010" position="0 0.065 0.003"></a-plane>
+
+                <!-- Log lines — 4 lines -->
+                <a-text id="vr-log-0" value="" position="-0.32 0.045 0.004" width="0.65" color="#c8b882" wrap-count="40" align="left"></a-text>
+                <a-text id="vr-log-1" value="" position="-0.32 0.01  0.004" width="0.65" color="#888"    wrap-count="40" align="left"></a-text>
+                <a-text id="vr-log-2" value="" position="-0.32 -0.025 0.004" width="0.65" color="#666"   wrap-count="40" align="left"></a-text>
+                <a-text id="vr-log-3" value="" position="-0.32 -0.06 0.004" width="0.65" color="#444"    wrap-count="40" align="left"></a-text>
+
+                <!-- Divider -->
+                <a-plane width="0.65" height="0.003" color="#3a2010" position="0 -0.082 0.003"></a-plane>
+
+                <!-- Stats -->
+                <a-text id="vr-stats" value="SCORE: 0  |  QUOTA: 0/2" position="-0.32 -0.105 0.004"
+                    width="0.65" color="#c8b882" wrap-count="35" align="left"></a-text>
+                <a-text id="vr-vote" value="" position="-0.32 -0.135 0.004"
+                    width="0.65" color="#ff8888" wrap-count="35" align="left"></a-text>
+
+                <!-- Divider -->
+                <a-plane width="0.65" height="0.003" color="#3a2010" position="0 -0.155 0.003"></a-plane>
+
+                <!-- Hint -->
+                <a-text id="vr-hint" value="Pull left trigger: toggle this panel" position="-0.32 -0.178 0.004"
+                    width="0.65" color="#444" wrap-count="40" align="left"></a-text>
+                <a-text value="Aim right controller + right trigger: interact" position="-0.32 -0.205 0.004"
+                    width="0.65" color="#333" wrap-count="40" align="left"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <!-- LEFT controller — menu button toggles VR HUD -->
+        <a-entity id="left-ctrl"
+            laser-controls="hand:left"
+            raycaster="objects:.clickable;far:8;enabled:false"
+            oculus-touch-controls="hand:left"
+            vive-controls="hand:left"
+            windows-motion-controls="hand:left">
+        </a-entity>
+
+        <!-- RIGHT controller — laser pointer for interaction -->
+        <a-entity id="right-ctrl"
+            laser-controls="hand:right"
+            raycaster="objects:.clickable;far:12;showLine:true;lineColor:#ff4400;lineOpacity:0.6"
+            oculus-touch-controls="hand:right"
+            vive-controls="hand:right"
+            windows-motion-controls="hand:right">
+        </a-entity>
+
+    </a-entity>
+</a-scene>
+
+<script>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let gameMinutes = 17 * 60; // start at 17:00
+let day = 1;
+let prisoners = [];
+let judgedKill = 0, judgedFree = 0;
+let intelLevel = 0;
+let intelDigits = ''; // collected digits
+let currentPhase = 'inspect'; // inspect / report / vote / done
+let scpActive = false;
+let scpMoveInterval = null;
+let gameEnded = false;
+let reportViewed = false;
+
+// ══════════════════════════════════════════════
+//  CRIME / CLAIM DATA  (expanded)
+// ══════════════════════════════════════════════
+const CLAIMS = [
+    {
+        label: "SICK",
+        id: 'sick',
+        crimes: ["Plague Spreading", "Quarantine Breach", "Bio-Contamination"],
+        stories: [
+            "The infection is killing me — look at my skin.",
+            "I caught the plague from Cell Block D. The spots are proof.",
+            "My temperature has been above 40 for three days."
+        ],
+        // TRUE: visible red spots on FRONT of torso
+        // LYING: spots only on BACK (player must walk around)
+        visualCheck: (p) => ({
+            isFront: !p.isLying,   // spots on front if honest
+            isBack:  p.isLying,    // spots on BACK if lying (tricky)
+        })
+    },
+    {
+        label: "STARVING",
+        id: 'hungry',
+        crimes: ["Bread Theft", "Ration Fraud", "Supply Sabotage"],
+        stories: [
+            "I haven't eaten in weeks — my body is wasting away.",
+            "They took my rations. I'm skin and bones.",
+            "The hunger is unbearable. I've lost half my weight."
+        ],
+        // TRUE: thin body   LYING: normal or fat body
+        visualCheck: (p) => ({ isThin: !p.isLying })
+    },
+    {
+        label: "HOMELESS",
+        id: 'homeless',
+        crimes: ["Vagrancy", "Trespassing Zone-7", "Radioactive Squatting"],
+        stories: [
+            "I slept in the radioactive rain — my clothes are still wet.",
+            "I have nowhere to go. I own nothing but these rags.",
+            "I was arrested for sheltering in the Dead Zone."
+        ],
+        // TRUE: ragged torn clothing  LYING: clean clothes
+        visualCheck: (p) => ({ isRagged: !p.isLying })
+    },
+    {
+        label: "INJURED",
+        id: 'injured',
+        crimes: ["Brawl Incitement", "Guard Assault", "Weapon Possession"],
+        stories: [
+            "I was attacked in the yard — my arm is broken.",
+            "The guards beat me. I can barely walk.",
+            "I was injured during the riot. Not my fault."
+        ],
+        // TRUE: visible arm sling/cast  LYING: no injury markers
+        visualCheck: (p) => ({ hasInjury: !p.isLying })
+    },
+    {
+        label: "WITNESS",
+        id: 'witness',
+        crimes: ["Information Hoarding", "Conspiracy", "Memory Crime"],
+        stories: [
+            "I saw what happened in Block 9. I'm a witness, not a criminal.",
+            "They locked me up to silence me. I know too much.",
+            "I witnessed the warden's corruption. That's my only crime."
+        ],
+        // TRUE: distinct marking (paper tucked in clothing)  LYING: nothing on them
+        visualCheck: (p) => ({ hasPaper: !p.isLying })
+    },
+    {
+        label: "POLITICAL",
+        id: 'political',
+        crimes: ["Dissent", "Unauthorized Speech", "Thought Crime"],
+        stories: [
+            "I only spoke the truth. They call it a crime here.",
+            "My writings were seized. I stand by every word.",
+            "Free thought is illegal in this block. I refuse to recant."
+        ],
+        visualCheck: (p) => ({ hasBadge: !p.isLying })
+    },
+    {
+        label: "REFORMED",
+        id: 'reformed',
+        crimes: ["Gang Affiliation", "Organised Crime", "Extortion"],
+        stories: [
+            "I left the gang two years ago. I am a changed man.",
+            "I have served my time. Those tattoos mean nothing now.",
+            "I am not who I was. The marks on my arm are from another life."
+        ],
+        // TRUE: tattoo on back of neck (hard to see, must be close)
+        // LYING: visible tattoo on forearm PLUS neck tattoo — two marks
+        // The tricky part: the forearm tattoo slowly fades in/out on a timer
+        // so it is only visible some of the time. Player must watch and wait.
+        visualCheck: (p) => ({ hasFadingTattoo: p.isLying, hasNeckTattoo: true })
+    },
+    {
+        label: "MEDIC",
+        id: 'medic',
+        crimes: ["Unlicensed Surgery", "Drug Distribution", "Medical Fraud"],
+        stories: [
+            "I am a trained doctor. I only tried to help the sick in here.",
+            "I have a medical licence — they revoked it without cause.",
+            "I distributed medicine to prisoners who would have died without it."
+        ],
+        // TRUE: white cloth strip around wrist (medical wrap)
+        // LYING: nothing — no medical markers at all
+        // Extra trick: the wrist wrap FLICKERS — it disappears briefly every few seconds
+        // if you blink you miss it. Must stare at the wrist.
+        visualCheck: (p) => ({ hasMedicWrap: !p.isLying })
+    },
+    {
+        label: "TRADER",
+        id: 'trader',
+        crimes: ["Black Market", "Contraband Smuggling", "Currency Fraud"],
+        stories: [
+            "I only traded food between cells. Nothing illegal.",
+            "I bartered extra rations. That is not a crime.",
+            "The coins were for bread. I never dealt in weapons or drugs."
+        ],
+        // TRUE: small coin/token tucked into shoe (visible only if you look down)
+        // LYING: nothing visible — pure bluff
+        // The coin is tiny, only shows if player crouches or looks at feet
+        visualCheck: (p) => ({ hasCoin: !p.isLying })
+    }
+];
+
+// ══════════════════════════════════════════════
+//  PRISONER FACTORY
+// ══════════════════════════════════════════════
+function createPrisoner(id) {
+    const c = CLAIMS[Math.floor(Math.random() * CLAIMS.length)];
+    const isLying = Math.random() > 0.45; // slightly more liars than innocents
+    // For sick: crayon presence overrides — will be set after hasCrayon is determined
+    const storyIdx = Math.floor(Math.random() * c.stories.length);
+    const crimeIdx = Math.floor(Math.random() * c.crimes.length);
+    const vis = c.visualCheck({ isLying });
+
+    const p = {
+        id: 700 + id,
+        claim: c.label,
+        claimId: c.id,
+        crime: c.crimes[crimeIdx],
+        story: c.stories[storyIdx],
+        isLying,
+        alive: true,
+        suspicion: isLying
+            ? 45 + Math.floor(Math.random() * 40)   // 45–85% if lying
+            : 5  + Math.floor(Math.random() * 38),  // 5–43% if honest
+        // visual traits — body size independent of claim
+        isThin:    (c.id === 'hungry' && !isLying),
+        // Fat can appear on ANY crime type (random 20% chance) — not just hungry liars
+        isFat:     (c.id === 'hungry' && isLying) || (c.id !== 'hungry' && Math.random() < 0.18),
+        hasSpots:  (c.id === 'sick'),  // back-only spots
+        spotsOnFront: false,
+        spotsOnBack:  (c.id === 'sick'),
+        // crayon: only sick, 50% chance — means spots are self-drawn (lying)
+        hasCrayon: (c.id === 'sick' && Math.random() > 0.5),
+        // Homeless ALWAYS has torn clothes — the lie is about where they slept, not poverty
+        isRagged:  (c.id === 'homeless'),
+        hasInjury: (c.id === 'injured' && !isLying),
+        hasPaper:  (c.id === 'witness' && !isLying),
+        hasBadge:       (c.id === 'political' && !isLying),
+        hasFadingTattoo:(c.id === 'reformed' && isLying),   // only on arm if lying, fades in/out
+        hasNeckTattoo:  (c.id === 'reformed'),               // always has neck tattoo
+        hasMedicWrap:   (c.id === 'medic' && !isLying),      // wrist wrap, flickers
+        hasCoin:        (c.id === 'trader' && !isLying),     // tiny coin at shoe level
+        // code digit this prisoner holds
+        digit: String(Math.floor(Math.random() * 10)),
+    };
+    // For sick prisoners: if they have a crayon, they DREW the spots — they are lying
+    if (p.claimId === 'sick' && p.hasCrayon) {
+        p.isLying = true;
+        p.suspicion = 50 + Math.floor(Math.random() * 35); // elevated but not certain
+    }
+    return p;
+}
+
+// ══════════════════════════════════════════════
+//  BUILD HUMAN — original model, extended with new visual traits
+// ══════════════════════════════════════════════
+function buildHuman(p) {
+    const root = document.createElement('a-entity');
+    root.setAttribute('class', 'prisoner-body');
+    const skin = "#d2b48c", orange = "#ff6600";
+
+    let bodyWidth = 0.6, bodyDepth = 0.3;
+    if (p.isThin) { bodyWidth = 0.35; bodyDepth = 0.2; }
+    if (p.isFat)  { bodyWidth = 1.1;  bodyDepth = 0.7; }
+
+    // — Torso —
+    const chest = document.createElement('a-box');
+    chest.setAttribute('width',  bodyWidth);
+    chest.setAttribute('height', 0.6);
+    chest.setAttribute('depth',  bodyDepth);
+    chest.setAttribute('position', '0 1.4 0');
+    chest.setAttribute('color', orange);
+    root.appendChild(chest);
+
+    const waist = document.createElement('a-box');
+    waist.setAttribute('width',  bodyWidth * 0.9);
+    waist.setAttribute('height', 0.4);
+    waist.setAttribute('depth',  bodyDepth);
+    waist.setAttribute('position', '0 1.0 0');
+    waist.setAttribute('color', orange);
+    root.appendChild(waist);
+
+    // — Head —
+    const head = document.createElement('a-box');
+    head.setAttribute('width', 0.35); head.setAttribute('height', 0.4); head.setAttribute('depth', 0.35);
+    head.setAttribute('position', '0 1.9 0');
+    head.setAttribute('color', skin);
+    root.appendChild(head);
+
+    // — Arms —
+    [-1, 1].forEach(side => {
+        const shoulderX = side * (bodyWidth / 2 + 0.1);
+        const bicep = document.createElement('a-box');
+        bicep.setAttribute('width', 0.15); bicep.setAttribute('height', 0.5); bicep.setAttribute('depth', 0.15);
+        bicep.setAttribute('position', `${shoulderX} 1.35 0`);
+        bicep.setAttribute('color', skin);
+        root.appendChild(bicep);
+
+        const forearm = document.createElement('a-box');
+        forearm.setAttribute('width', 0.12); forearm.setAttribute('height', 0.5); forearm.setAttribute('depth', 0.12);
+        forearm.setAttribute('position', `${shoulderX} 0.9 0`);
+        forearm.setAttribute('color', skin);
+        root.appendChild(forearm);
+
+        // Injury: sling on left arm
+        if (p.hasInjury && side === -1) {
+            const sling = document.createElement('a-box');
+            sling.setAttribute('width', 0.18); sling.setAttribute('height', 0.1); sling.setAttribute('depth', 0.18);
+            sling.setAttribute('position', `${shoulderX} 1.1 0.08`);
+            sling.setAttribute('color', '#e8e0c8');
+            root.appendChild(sling);
+            const cast = document.createElement('a-box');
+            cast.setAttribute('width', 0.18); cast.setAttribute('height', 0.42); cast.setAttribute('depth', 0.18);
+            cast.setAttribute('position', `${shoulderX} 0.9 0.04`);
+            cast.setAttribute('color', '#ddd8c0');
+            root.appendChild(cast);
+        }
+    });
+
+    // — Legs —
+    [-1, 1].forEach(side => {
+        const legX = side * (bodyWidth / 4);
+        const thigh = document.createElement('a-box');
+        thigh.setAttribute('width', 0.25); thigh.setAttribute('height', 0.5); thigh.setAttribute('depth', 0.25);
+        thigh.setAttribute('position', `${legX} 0.6 0`);
+        thigh.setAttribute('color', orange);
+        root.appendChild(thigh);
+
+        const calf = document.createElement('a-box');
+        calf.setAttribute('width', 0.2); calf.setAttribute('height', 0.6); calf.setAttribute('depth', 0.2);
+        calf.setAttribute('position', `${legX} 0.1 0`);
+        calf.setAttribute('color', skin);
+        root.appendChild(calf);
+    });
+
+    // — Ragged overlay (homeless) —
+    if (p.isRagged) {
+        const rag1 = document.createElement('a-box');
+        rag1.setAttribute('width', 0.12); rag1.setAttribute('height', 0.25); rag1.setAttribute('depth', 0.08);
+        rag1.setAttribute('position', `${bodyWidth*0.35} 1.2 ${bodyDepth*0.5+0.01}`);
+        rag1.setAttribute('color', '#4a3820'); rag1.setAttribute('rotation', '0 0 25');
+        root.appendChild(rag1);
+        const rag2 = document.createElement('a-box');
+        rag2.setAttribute('width', 0.1); rag2.setAttribute('height', 0.2); rag2.setAttribute('depth', 0.08);
+        rag2.setAttribute('position', `-${bodyWidth*0.3} 1.0 ${bodyDepth*0.5+0.01}`);
+        rag2.setAttribute('color', '#3a2a14'); rag2.setAttribute('rotation', '0 0 -20');
+        root.appendChild(rag2);
+        // torn legs
+        const tear = document.createElement('a-box');
+        tear.setAttribute('width', 0.08); tear.setAttribute('height', 0.18); tear.setAttribute('depth', 0.08);
+        tear.setAttribute('position', `${bodyWidth*0.2} 0.3 0.14`);
+        tear.setAttribute('color', '#2a1a08');
+        root.appendChild(tear);
+    }
+
+    // — Witness paper sticking out of chest pocket —
+    if (p.hasPaper) {
+        const paper = document.createElement('a-box');
+        paper.setAttribute('width', 0.14); paper.setAttribute('height', 0.12); paper.setAttribute('depth', 0.02);
+        paper.setAttribute('position', `${bodyWidth*0.25} 1.55 ${bodyDepth*0.5+0.02}`);
+        paper.setAttribute('color', '#f0e8c0');
+        root.appendChild(paper);
+        const fold = document.createElement('a-box');
+        fold.setAttribute('width', 0.14); fold.setAttribute('height', 0.04); fold.setAttribute('depth', 0.015);
+        fold.setAttribute('position', `${bodyWidth*0.25} 1.64 ${bodyDepth*0.5+0.02}`);
+        fold.setAttribute('color', '#d4c890');
+        root.appendChild(fold);
+    }
+
+    // — Political badge/armband —
+    if (p.hasBadge) {
+        const badge = document.createElement('a-box');
+        badge.setAttribute('width', 0.18); badge.setAttribute('height', 0.18); badge.setAttribute('depth', 0.03);
+        badge.setAttribute('position', `-${bodyWidth*0.28} 1.45 ${bodyDepth*0.5+0.02}`);
+        badge.setAttribute('color', '#cc0000');
+        root.appendChild(badge);
+        const badgeX = document.createElement('a-text');
+        badgeX.setAttribute('value', 'X');
+        badgeX.setAttribute('position', `-${bodyWidth*0.28+0.06} 1.45 ${bodyDepth*0.5+0.05}`);
+        badgeX.setAttribute('width', '0.4'); badgeX.setAttribute('color', '#fff');
+        root.appendChild(badgeX);
+    }
+
+    // — REFORMED: neck tattoo (always) + fading forearm tattoo (if lying) —
+    if (p.hasNeckTattoo) {
+        const nkTat = document.createElement('a-box');
+        nkTat.setAttribute('width', '0.08'); nkTat.setAttribute('height', '0.12'); nkTat.setAttribute('depth', '0.04');
+        nkTat.setAttribute('position', '0 2.06 -0.16'); // back of neck
+        nkTat.setAttribute('color', '#1a1060');
+        root.appendChild(nkTat);
+    }
+    if (p.hasFadingTattoo) {
+        // Forearm tattoo that fades in and out — only visible some of the time
+        // Uses animation to oscillate opacity 0→1→0 every 4 seconds
+        const fTat = document.createElement('a-box');
+        fTat.setAttribute('width', '0.18'); fTat.setAttribute('height', '0.08'); fTat.setAttribute('depth', '0.13');
+        fTat.setAttribute('position', `${bodyWidth/2+0.14} 0.9 0`);
+        fTat.setAttribute('color', '#1a0a50');
+        fTat.setAttribute('material', 'opacity: 0; transparent: true');
+        // Animate: hidden most of the time, briefly visible
+        fTat.setAttribute('animation', 'property: material.opacity; from: 0; to: 0.9; dir: alternate; dur: 3200; loop: true; easing: easeInOutSine; delay: 1400');
+        root.appendChild(fTat);
+    }
+
+    // — MEDIC: wrist wrap that flickers briefly every few seconds —
+    if (p.hasMedicWrap) {
+        const wrap = document.createElement('a-box');
+        wrap.setAttribute('width', '0.14'); wrap.setAttribute('height', '0.1'); wrap.setAttribute('depth', '0.14');
+        wrap.setAttribute('position', `${-(bodyWidth/2+0.1)} 0.72 0`); // left wrist
+        wrap.setAttribute('color', '#e8e4d8');
+        // Flicker: mostly visible, disappears briefly
+        wrap.setAttribute('material', 'opacity: 1; transparent: true');
+        wrap.setAttribute('animation', 'property: material.opacity; from: 1; to: 0; dir: alternate; dur: 800; loop: true; easing: easeInOutQuad; delay: 2600');
+        root.appendChild(wrap);
+        const wrapLine = document.createElement('a-box');
+        wrapLine.setAttribute('width', '0.145'); wrapLine.setAttribute('height', '0.02'); wrapLine.setAttribute('depth', '0.145');
+        wrapLine.setAttribute('position', `${-(bodyWidth/2+0.1)} 0.77 0`);
+        wrapLine.setAttribute('color', '#ccbbaa');
+        wrapLine.setAttribute('material', 'opacity: 1; transparent: true');
+        wrapLine.setAttribute('animation', 'property: material.opacity; from: 1; to: 0; dir: alternate; dur: 800; loop: true; easing: easeInOutQuad; delay: 2600');
+        root.appendChild(wrapLine);
+    }
+
+    // — TRADER: tiny coin on floor near foot — must look down —
+    if (p.hasCoin) {
+        const coin = document.createElement('a-cylinder');
+        coin.setAttribute('radius', '0.04'); coin.setAttribute('height', '0.01');
+        coin.setAttribute('color', '#c8a840');
+        coin.setAttribute('position', `${bodyWidth*0.4} 0.005 0.22`); // floor level, near right foot
+        coin.setAttribute('rotation', '90 0 0');
+        root.appendChild(coin);
+        const coinShine = document.createElement('a-circle');
+        coinShine.setAttribute('radius', '0.025');
+        coinShine.setAttribute('color', '#ffe090');
+        coinShine.setAttribute('position', `${bodyWidth*0.4} 0.012 0.22`);
+        coinShine.setAttribute('rotation', '-90 0 0');
+        root.appendChild(coinShine);
+    }
+
+    // — SICK SPOTS — always on BACK only. Player must walk around to see.
+    // If prisoner also has a crayon, it means they drew the spots = they are lying.
+    if (p.hasSpots) {
+        // 3-5 spots hidden on the back
+        const numSpots = 3 + Math.floor(Math.random() * 3);
+        for (let s = 0; s < numSpots; s++) {
+            const spot = document.createElement('a-sphere');
+            const sx = (Math.random() - 0.5) * bodyWidth * 0.7;
+            const sy = 1.2 + Math.random() * 0.65;
+            const sz = -(bodyDepth * 0.5 + 0.04 + Math.random() * 0.03);
+            spot.setAttribute('radius', String(0.04 + Math.random() * 0.04));
+            spot.setAttribute('color', '#bb0000');
+            spot.setAttribute('position', `${sx.toFixed(3)} ${sy.toFixed(3)} ${sz.toFixed(3)}`);
+            root.appendChild(spot);
+        }
+    }
+
+    // — RED CRAYON beside right leg (means spots are self-drawn = lying) —
+    if (p.hasCrayon) {
+        // Crayon body — a thin red cylinder lying on the floor near the right leg
+        const crayonBody = document.createElement('a-cylinder');
+        crayonBody.setAttribute('radius', '0.025');
+        crayonBody.setAttribute('height', '0.22');
+        crayonBody.setAttribute('color', '#dd1111');
+        crayonBody.setAttribute('position', `${bodyWidth*0.35 + 0.1} 0.11 0.08`);
+        crayonBody.setAttribute('rotation', '0 30 90'); // lying flat, slightly angled
+        root.appendChild(crayonBody);
+        // Crayon tip — dark red cone
+        const crayonTip = document.createElement('a-cone');
+        crayonTip.setAttribute('radius-bottom', '0.025');
+        crayonTip.setAttribute('radius-top', '0.001');
+        crayonTip.setAttribute('height', '0.05');
+        crayonTip.setAttribute('color', '#8b0000');
+        crayonTip.setAttribute('position', `${bodyWidth*0.35 + 0.19} 0.11 0.075`);
+        crayonTip.setAttribute('rotation', '0 30 90');
+        root.appendChild(crayonTip);
+        // Crayon label stripe
+        const crayonLabel = document.createElement('a-cylinder');
+        crayonLabel.setAttribute('radius', '0.027');
+        crayonLabel.setAttribute('height', '0.04');
+        crayonLabel.setAttribute('color', '#ffeeee');
+        crayonLabel.setAttribute('position', `${bodyWidth*0.35 + 0.06} 0.11 0.083`);
+        crayonLabel.setAttribute('rotation', '0 30 90');
+        root.appendChild(crayonLabel);
+    }
+
+    return root;
+}
+
+// ══════════════════════════════════════════════
+//  RENDER CELL BLOCK
+// ══════════════════════════════════════════════
+function renderBlock() {
+    const block = document.getElementById('cell-block');
+    block.innerHTML = '';
+
+    prisoners.forEach((p, i) => {
+        if (!p.alive) return;
+
+        const side = i % 2 === 0 ? -1 : 1;
+        const zPos = -Math.floor(i / 2) * 18 - 10;
+
+        const cell = document.createElement('a-entity');
+        cell.setAttribute('position', `${side * 12} 0 ${zPos}`);
+        cell.setAttribute('rotation', `0 ${side === -1 ? 90 : -90} 0`);
+
+        // Back wall — flush with cell depth
+        const wallBack = document.createElement('a-box');
+        wallBack.setAttribute('position', '0 5 -9');
+        wallBack.setAttribute('width',  '15');
+        wallBack.setAttribute('height', '10');
+        wallBack.setAttribute('depth',  '0.5');
+        wallBack.setAttribute('color',  '#1a1a1a');
+        cell.appendChild(wallBack);
+
+        // Left divider wall — extends from back wall to bar line
+        const wallLeft = document.createElement('a-box');
+        wallLeft.setAttribute('position', '-7.5 5 -0.75');
+        wallLeft.setAttribute('width',  '0.5');
+        wallLeft.setAttribute('height', '10');
+        wallLeft.setAttribute('depth',  '16.5');  // reaches from back wall to bar plane
+        wallLeft.setAttribute('color',  '#222');
+        cell.appendChild(wallLeft);
+
+        // Right divider wall
+        const wallRight = document.createElement('a-box');
+        wallRight.setAttribute('position', '7.5 5 -0.75');
+        wallRight.setAttribute('width',  '0.5');
+        wallRight.setAttribute('height', '10');
+        wallRight.setAttribute('depth',  '16.5');
+        wallRight.setAttribute('color',  '#222');
+        cell.appendChild(wallRight);
+
+        // Floor slab
+        const floor = document.createElement('a-box');
+        floor.setAttribute('position', '0 -0.05 -1');
+        floor.setAttribute('width', '14.5'); floor.setAttribute('height', '0.1'); floor.setAttribute('depth', '16');
+        floor.setAttribute('color', '#1c1c1c');
+        cell.appendChild(floor);
+
+        // Ceiling slab
+        const ceiling = document.createElement('a-box');
+        ceiling.setAttribute('position', '0 10 -1');
+        ceiling.setAttribute('width', '14.5'); ceiling.setAttribute('height', '0.1'); ceiling.setAttribute('depth', '16');
+        ceiling.setAttribute('color', '#111');
+        cell.appendChild(ceiling);
+
+        // Bars — at z=7.5, spanning exactly the cell width
+        for (let b = -7; b <= 7; b += 1.8) {
+            const bar = document.createElement('a-cylinder');
+            bar.setAttribute('radius', 0.1);
+            bar.setAttribute('height', 10);
+            bar.setAttribute('position', `${b} 5 7.5`);
+            bar.setAttribute('color', '#000');
+            cell.appendChild(bar);
+        }
+        // Horizontal bar rails
+        [1.5, 5.0, 8.5].forEach(y => {
+            const hbar = document.createElement('a-box');
+            hbar.setAttribute('width', '14.5'); hbar.setAttribute('height', '0.1'); hbar.setAttribute('depth', '0.1');
+            hbar.setAttribute('position', `0 ${y} 7.5`);
+            hbar.setAttribute('color', '#111');
+            cell.appendChild(hbar);
+        });
+
+        // Cell light
+        const bulb = document.createElement('a-sphere');
+        bulb.setAttribute('radius', '0.15'); bulb.setAttribute('position', '0 9.5 -2');
+        bulb.setAttribute('color', '#ffee88');
+        bulb.setAttribute('material', 'emissive:#ffcc44;emissiveIntensity:0.8');
+        cell.appendChild(bulb);
+        const cellLight = document.createElement('a-light');
+        cellLight.setAttribute('type', 'point'); cellLight.setAttribute('color', '#ffcc88');
+        cellLight.setAttribute('intensity', '0.6'); cellLight.setAttribute('distance', '14');
+        cellLight.setAttribute('position', '0 9.2 -2');
+        cell.appendChild(cellLight);
+
+        // Cot
+        const cot = document.createElement('a-box');
+        cot.setAttribute('position', '5 0.3 -4'); cot.setAttribute('width', '3'); cot.setAttribute('height', '0.2'); cot.setAttribute('depth', '6');
+        cot.setAttribute('color', '#2a2216');
+        cell.appendChild(cot);
+
+        // Prisoner body
+        const body = buildHuman(p);
+        body.setAttribute('id', `inmate-${i}`);
+        body.setAttribute('position', '0 0 2');
+        cell.appendChild(body);
+
+        // File card on back wall
+        const file = document.createElement('a-plane');
+        file.setAttribute('position', '0 4.5 -8.7');
+        file.setAttribute('width', '8'); file.setAttribute('height', '4.5');
+        file.setAttribute('color', '#d2b48c');
+        cell.appendChild(file);
+
+        const fileText = document.createElement('a-text');
+        fileText.setAttribute('value', `ID: ${p.id}\nPLEA: ${p.claim}\nCRIME: ${p.crime}\n\n"${p.story}"`);
+        fileText.setAttribute('color', '#000'); fileText.setAttribute('align', 'center');
+        fileText.setAttribute('width', '6'); fileText.setAttribute('wrap-count', '28');
+        fileText.setAttribute('position', '0 4.5 -8.6');
+        cell.appendChild(fileText);
+
+        // KILL button — only visible during vote phase
+        const kBtn = document.createElement('a-box');
+        kBtn.setAttribute('class', 'clickable');
+        kBtn.setAttribute('data-action', 'kill');
+        kBtn.setAttribute('data-id', String(i));
+        kBtn.setAttribute('position', '-3 1.2 7.7');
+        kBtn.setAttribute('scale', '1.5 1 0.2');
+        kBtn.setAttribute('color', '#8b0000');
+        cell.appendChild(kBtn);
+
+        const kLabel = document.createElement('a-text');
+        kLabel.setAttribute('value', 'EXECUTE'); kLabel.setAttribute('color', '#ff8888');
+        kLabel.setAttribute('position', '-3.8 1.22 7.82'); kLabel.setAttribute('width', '3');
+        cell.appendChild(kLabel);
+
+        const rBtn = document.createElement('a-box');
+        rBtn.setAttribute('class', 'clickable');
+        rBtn.setAttribute('data-action', 'free');
+        rBtn.setAttribute('data-id', String(i));
+        rBtn.setAttribute('position', '3 1.2 7.7');
+        rBtn.setAttribute('scale', '1.5 1 0.2');
+        rBtn.setAttribute('color', '#004400');
+        cell.appendChild(rBtn);
+
+        const rLabel = document.createElement('a-text');
+        rLabel.setAttribute('value', 'RELEASE'); rLabel.setAttribute('color', '#88ff88');
+        rLabel.setAttribute('position', '2.2 1.22 7.82'); rLabel.setAttribute('width', '3');
+        cell.appendChild(rLabel);
+
+        block.appendChild(cell);
+    });
+}
+
+// ══════════════════════════════════════════════
+//  PHASE SYSTEM
+// ══════════════════════════════════════════════
+function getHour() { return Math.floor(gameMinutes / 60) % 24; }
+
+function updatePhase(h) {
+    const banner = document.getElementById('phase-banner');
+    const voteStatus = document.getElementById('vote-status');
+    const voteLock = document.getElementById('vote-lock');
+    const lockReason = document.getElementById('lock-reason');
+    const sky = document.getElementById('sky');
+
+    // Phase transitions
+    if (h >= 17 && h < 19) {
+        // 17:00–19:00 — INSPECT
+        if (currentPhase !== 'inspect') {
+            currentPhase = 'inspect';
+            addLog('17:00 — Inspect the cells. Walk among the prisoners. Note their condition.', 'info');
+        }
+        banner.style.display = 'block';
+        banner.className = 'phase-inspect';
+        banner.textContent = '☀ 17:00–19:00 — INSPECT THE CELLS';
+        sky.setAttribute('color', '#050816');
+        voteLock.style.display = 'none';
+        voteStatus.style.display = 'none';
+
+    } else if (h >= 19 && h < 21) {
+        // 19:00–21:00 — REPORT
+        if (currentPhase !== 'report') {
+            currentPhase = 'report';
+            addLog('19:00 — Report is live. Visit the Intel Terminal.', 'warn');
+        }
+        banner.style.display = 'block';
+        banner.className = 'phase-report';
+        banner.textContent = '📋 19:00–21:00 — CHECK THE REPORT';
+        sky.setAttribute('color', '#020510');
+        voteLock.style.display = 'block';
+        lockReason.textContent = 'JUDGMENT LOCKED until 21:00';
+        voteStatus.style.display = 'none';
+
+    } else if (h >= 21 && h < 24) {
+        // 21:00–24:00 — VOTE / JUDGMENT
+        if (currentPhase !== 'vote') {
+            currentPhase = 'vote';
+            addLog('21:00 — JUDGMENT HOUR. Execute 1. Release 1. Before midnight.', 'bad');
+            triggerSCP();
+        }
+        banner.style.display = 'block';
+        banner.className = 'phase-vote';
+        banner.textContent = '⚔ 21:00–24:00 — EXECUTE 1 | RELEASE 1';
+        sky.setAttribute('color', '#000000');
+        voteLock.style.display = 'none';
+        voteStatus.style.display = 'block';
+        document.getElementById('v-kill').textContent = judgedKill;
+        document.getElementById('v-free').textContent = judgedFree;
+
+    } else if (h === 0 || h < 17) {
+        // MIDNIGHT — check quota
+        if (currentPhase !== 'done' && !gameEnded) {
+            currentPhase = 'done';
+            checkQuota();
+        }
+    }
+}
+
+// ══════════════════════════════════════════════
+//  CLOCK TICK  (200ms = ~3 game-seconds at 1hr/20sec)
+// ══════════════════════════════════════════════
+function tick() {
+    if (gameEnded) return;
+    gameMinutes++;
+
+    const h = getHour();
+    const m = gameMinutes % 60;
+
+    document.getElementById('clock-hud').innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+
+    // Progress bar: 17:00 to 24:00 = 420 minutes
+    const pct = Math.min(100, ((gameMinutes - 17*60) / (7*60)) * 100);
+    document.getElementById('progress-fill').style.width = pct + '%';
+
+    updatePhase(h);
+
+    // Day 5+ intake mode hooks
+    if (intakeMode) {
+        checkIntakeArrivals(h);
+        checkIntakeNight(h);
+    }
+
+    // SCP movement during judgment hour
+    if (scpActive) moveSCP();
+
+    // Update VR HUD if visible
+    if (inVR && vrHudVisible) updateVRHud();
+
+    // Prisoner look-at when close
+    const rigPos = document.getElementById('rig').object3D.position;
+    prisoners.forEach((p, i) => {
+        if (!p.alive) return;
+        const el = document.getElementById(`inmate-${i}`);
+        if (el) {
+            const wPos = new THREE.Vector3();
+            el.object3D.getWorldPosition(wPos);
+            if (wPos.distanceTo(rigPos) < 2.5) {
+                el.object3D.rotation.y = Math.sin(Date.now() * 0.001) * 0.2;
+            } else {
+                el.object3D.rotation.y = 0;
+            }
+        }
+    });
+}
+
+// ══════════════════════════════════════════════
+//  JUDGMENT
+// ══════════════════════════════════════════════
+function handleJudgment(id, action) {
+    if (gameEnded) return;
+
+    // Time gate — only during 21:00–24:00
+    const h = getHour();
+    if (currentPhase !== 'vote') {
+        if (h < 21) {
+            addLog(`Judgment locked until 21:00. Current time: ${String(h).padStart(2,'0')}:${String(gameMinutes%60).padStart(2,'0')}`, 'warn');
+        }
+        return;
+    }
+
+    const p = prisoners[id];
+    if (!p || !p.alive) return;
+
+    // Quota: only 1 kill and 1 free per night
+    if (action === 'kill' && judgedKill >= 1) { addLog('Already executed 1 prisoner tonight.', 'warn'); return; }
+    if (action === 'free' && judgedFree >= 1) { addLog('Already released 1 prisoner tonight.', 'warn'); return; }
+
+    const correct = (action === 'kill' && p.isLying) || (action === 'free' && !p.isLying);
+
+    if (correct) {
+        intelLevel++;
+        if (action === 'kill') judgedKill++;
+        else judgedFree++;
+
+        document.getElementById('intel-val').innerText = intelLevel;
+        document.getElementById('quota-val').innerText = (judgedKill + judgedFree) + '/2';
+        document.getElementById('v-kill').textContent = judgedKill;
+        document.getElementById('v-free').textContent = judgedFree;
+
+        p.alive = false;
+        renderBlock();
+        addLog(`Correct. ${p.id} ${action === 'kill' ? 'executed' : 'released'}. Intel +1.`, 'good');
+
+        // Reveal one digit of a random remaining prisoner
+        revealDigit(p);
+    } else {
+        // Wrong — jumpscare immediately
+        doJumpscare(`WRONG JUDGMENT`, `${p.id} was ${p.isLying ? 'GUILTY' : 'INNOCENT'}. You chose wrong.`);
+    }
+}
+
+// ══════════════════════════════════════════════
+//  INTEL DIGIT REVEAL
+// ══════════════════════════════════════════════
+function revealDigit(judgedPrisoner) {
+    // Pick a random prisoner's digit — 70% chance it's someone OTHER than who was judged
+    const others = prisoners.filter(x => x.alive && x.id !== judgedPrisoner.id);
+    let source;
+    if (others.length > 0 && Math.random() < 0.7) {
+        // More likely to be a different prisoner — keeps you guessing
+        source = others[Math.floor(Math.random() * others.length)];
+    } else {
+        source = judgedPrisoner;
+    }
+
+    // Show only this single digit — no history, no color, no brackets
+    document.getElementById('reveal-digits').textContent = source.digit;
+
+    // Simple hint — just total collected, no prisoner ID
+    intelDigits += source.digit;
+    const hint = document.querySelector('#intel-reveal .hint-text');
+    if (hint) hint.textContent = `${intelDigits.length} digit${intelDigits.length > 1 ? 's' : ''} collected`;
+
+    document.getElementById('intel-reveal').style.display = 'block';
+}
+
+function closeReveal() {
+    document.getElementById('intel-reveal').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════
+//  OFFICE REPORT
+// ══════════════════════════════════════════════
+function openReport() {
+    const h = getHour();
+    const reportLocked = document.getElementById('report-locked');
+    const reportText   = document.getElementById('report-text');
+
+    document.getElementById('office-report').style.display = 'block';
+
+    if (h < 19) {
+        reportLocked.style.display = 'block';
+        reportText.innerHTML = '';
+        return;
+    }
+    reportLocked.style.display = 'none';
+    reportViewed = true;
+
+    let html = `<p style="font-size:11px;color:#555;margin-bottom:12px">CLASSIFICATION: INTERNAL | DAY ${day} REPORT</p>`;
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:4px;font-weight:bold;border-bottom:2px solid #333;padding-bottom:6px;margin-bottom:6px;font-size:12px">
+        <span>INMATE ID</span><span>PLEA</span><span>INCIDENT NOTE</span><span style="text-align:right">SUSPICION</span></div>`;
+
+    prisoners.forEach(p => {
+        if (!p.alive) return;
+        const pct = p.suspicion;
+        const cls = pct >= 60 ? 'pct-high' : pct >= 30 ? 'pct-mid' : 'pct-low';
+        // Deliberately ambiguous notes — do not reveal truth
+        // Sick: note just says "dermal complaint reported" regardless — player must check back
+        // Crayon presence is never mentioned in the report
+        const notes = {
+            sick: [
+                'Dermal complaint self-reported on intake.',
+                'Requests medical review. No independent examination yet.',
+                'Unusual markings reported by neighbouring cell.',
+                'No fever recorded. Complaint unverified.',
+            ],
+            hungry: [
+                'Weight recorded on intake. No medical flag raised.',
+                'Ration records show standard allocation.',
+                'Self-reported malnutrition. Physical assessment pending.',
+                'Dietary complaint. Kitchen logs normal.',
+            ],
+            homeless: [
+                'Arrived without registered address.',
+                'Clothing condition noted on intake form.',
+                'No fixed abode listed in processing file.',
+                'Registered as street-origin. No prior record.',
+            ],
+            injured: [
+                'Self-reported physical complaint on arrival.',
+                'Infirmary visit requested. Awaiting appointment.',
+                'Physical assessment incomplete.',
+                'Mobility complaint. Movement observed as normal.',
+            ],
+            witness: [
+                'Claims to hold information of institutional value.',
+                'Verbal testimony offered but not recorded.',
+                'Personal effects catalogued and stored.',
+                'Made claims of prior observations in Block 9.',
+            ],
+            political: [
+                'Held for administrative review.',
+                'Political classification pending tribunal.',
+                'Prior association with restricted groups unconfirmed.',
+                'Verbal dissent noted. No physical evidence seized.',
+            ],
+            reformed: [
+                'Prior conviction on record. Claims rehabilitation.',
+                'Gang affiliation listed in old file. Current status unknown.',
+                'Requests transfer to general population.',
+                'Voluntary cooperation noted. Background unverified.',
+            ],
+            medic: [
+                'Claims professional credentials. Verification pending.',
+                'Possession of medical materials noted on intake.',
+                'Other inmates report receiving treatment from this individual.',
+                'Licence status unconfirmed with Ministry of Health.',
+            ],
+            trader: [
+                'Accused of barter activity within cell block.',
+                'No physical evidence recovered at time of arrest.',
+                'Multiple inmate testimonies conflict on this subject.',
+                'Contraband search inconclusive.',
+            ],
+        };
+        const noteList = notes[p.claimId] || ['No additional notes.'];
+        const note = noteList[Math.floor(Math.random() * noteList.length)];
+
+        // Suspicion always hidden — always shows ??
+        html += `<div class="report-row">
+            <span class="rname">#${p.id}</span>
+            <span class="rclaim">${p.claim}<br><span class="report-note">${p.crime}</span></span>
+            <span style="font-size:11px;color:#444">${note}<br><span class="report-note">"${p.story}"</span></span>
+            <span class="rpct" style="font-family:'Orbitron',sans-serif;font-size:16px;color:#555;flex:0 0 60px;text-align:right">??%</span>
+        </div>`;
+    });
+
+    reportText.innerHTML = html;
+}
+
+function closeReport() {
+    document.getElementById('office-report').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════
+//  QUOTA CHECK AT MIDNIGHT
+// ══════════════════════════════════════════════
+function checkQuota() {
+    if (judgedKill >= 1 && judgedFree >= 1) {
+        // Success — advance day
+        addLog(`Day ${day} complete. Protocol met.`, 'good');
+        day++;
+        document.getElementById('day-val').innerText = day;
+        judgedKill = 0; judgedFree = 0;
+        gameMinutes = 17 * 60;
+        currentPhase = 'inspect';
+        // Day 5 triggers intake mode — switch entirely
+        if (day === 5) { setTimeout(startIntakeMode, 800); return; }
+        prisoners = [];
+        const cellCount = day >= 3 ? 4 : 10; // days 1-2: 10 cells, day 3+: 4 cells
+        if (day >= 3) {
+            // Guarantee 1 truth-teller, 1 liar, rest random
+            const truthPrisoner = createPrisoner(0);
+            truthPrisoner.isLying = false;
+            // Recalculate suspicion for guaranteed truth
+            truthPrisoner.suspicion = 5 + Math.floor(Math.random() * 35);
+            prisoners.push(truthPrisoner);
+            const liarPrisoner = createPrisoner(1);
+            liarPrisoner.isLying = true;
+            liarPrisoner.suspicion = 50 + Math.floor(Math.random() * 35);
+            prisoners.push(liarPrisoner);
+            for (let i = 2; i < cellCount; i++) prisoners.push(createPrisoner(i));
+            // Shuffle so guaranteed ones aren't always cells 0 and 1
+            for (let i = prisoners.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [prisoners[i], prisoners[j]] = [prisoners[j], prisoners[i]];
+            }
+        } else {
+            for (let i = 0; i < cellCount; i++) prisoners.push(createPrisoner(i));
+        }
+        renderBlock();
+        scpActive = false;
+        document.getElementById('scp-entity').setAttribute('visible','false');
+        document.getElementById('scp-warning').style.display = 'none';
+    } else {
+        doJumpscare('QUOTA NOT MET', `You failed to execute 1 and release 1 before midnight on Day ${day}.`);
+    }
+}
+
+// ══════════════════════════════════════════════
+//  SCP ENTITY
+// ══════════════════════════════════════════════
+let scpPhase = 0;
+const SCP_EVENTS = [
+    () => { addLog('Something moved at the end of the corridor.', 'scp'); flashScreen('#220033', 200); },
+    () => { addLog('The lights flickered. A shape at Block Z.', 'scp'); flashScreen('#110022', 150); },
+    () => {
+        document.getElementById('scp-entity').setAttribute('visible', 'true');
+        document.getElementById('scp-warning').style.display = 'block';
+        document.getElementById('scp-warning').innerHTML = '⚠ SCP-████ BREACH<br>ENTITY DETECTED IN BLOCK<br>Do not look directly.';
+        addLog('SCP-████ has entered the cell block. Judgment is mandatory.', 'scp');
+    },
+    () => {
+        // SCP moves closer — distorts ambient light
+        document.querySelector('a-light[type=ambient]').setAttribute('intensity','0.2');
+        document.querySelector('a-light[type=ambient]').setAttribute('color','#220011');
+        addLog('Power fluctuating. Entity approaching.', 'scp');
+        flashScreen('#330000', 400);
+    },
+    () => {
+        // Final SCP event — if quota still not met, instant jumpscare
+        if (judgedKill < 1 || judgedFree < 1) {
+            doJumpscare('SCP-████ HAS REACHED YOU', 'You failed to complete the protocol in time.');
+        }
+    }
+];
+
+function triggerSCP() {
+    scpActive = true;
+    scpPhase = 0;
+    // Stagger SCP events across the judgment hour (20 min each at game speed)
+    SCP_EVENTS.forEach((fn, idx) => {
+        setTimeout(fn, idx * 60000); // 60s apart in game time (~5min real at 1hr=20sec)
+    });
+}
+
+let scpMoveT = 0;
+function moveSCP() {
+    scpMoveT += 0.003;
+    const scp = document.getElementById('scp-entity');
+    if (!scp) return;
+    // Slowly drift toward player
+    const pos = scp.getAttribute('position');
+    if (pos && pos.z < -30) {
+        scp.setAttribute('position', `${Math.sin(scpMoveT)*2} 1.6 ${pos.z + 0.02}`);
+    }
+}
+
+function flashScreen(color, duration) {
+    const flash = document.createElement('div');
+    flash.style.cssText = `position:fixed;inset:0;background:${color};z-index:9990;pointer-events:none;`;
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), duration);
+}
+
+// ══════════════════════════════════════════════
+//  JUMPSCARE
+// ══════════════════════════════════════════════
+function doJumpscare(title, sub) {
+    if (gameEnded) return;
+    gameEnded = true;
+    const js = document.getElementById('jumpscare');
+    document.getElementById('jumpscare-text').textContent = title;
+    document.getElementById('jumpscare-sub').textContent = sub;
+    // Flash-flash-show
+    flashScreen('#ff0000', 100);
+    setTimeout(() => flashScreen('#ffffff', 80), 120);
+    setTimeout(() => flashScreen('#ff0000', 100), 220);
+    setTimeout(() => { js.style.display = 'flex'; }, 350);
+}
+
+// ══════════════════════════════════════════════
+//  LOGS
+// ══════════════════════════════════════════════
+function addLog(msg, type) {
+    const bar = document.getElementById('log-hud');
+    const line = document.createElement('div');
+    line.className = `log-line log-${type}`;
+    line.textContent = msg;
+    bar.prepend(line);
+    while (bar.children.length > 6) bar.removeChild(bar.lastChild);
+}
+
+// ══════════════════════════════════════════════
+//  DAY 5 — INTAKE MODE
+// ══════════════════════════════════════════════
+let intakeMode = false;
+let intakePrisoners = [];       // 20 cells
+let intakeCellCount = 0;        // how many admitted today
+let intakeSickAdmitted = 0;     // how many infected let through
+let intakeCurrentArrival = null;
+let intakeScanInterval = null;
+let intakeScanStep = 0;
+let intakeLog = [];
+let infectionLevel = 0;         // 0=clean, grows each day a sick was let through
+let intakeDayNum = 5;           // tracks days within mode
+const INTAKE_MIN_HEALTHY = [0, 2, 2, 4, 6]; // min healthy needed at end of days 5,6,7,8,9
+
+// A new person arrives every in-game hour (17:00–22:00 = 5 arrivals min + 2 guaranteed healthy)
+function startIntakeMode() {
+    intakeMode = true;
+    intakePrisoners = [];
+    // Build 20 vacant cells
+    renderIntakeBlock();
+    // Show intake desk in scene
+    document.getElementById('intake-zone').setAttribute('visible', 'true');
+    document.getElementById('intake-day-label').textContent = intakeDayNum;
+    addLog('DAY 5 — INTAKE MODE. Measure each arrival. Admit the healthy. Reject the infected.', 'info');
+    addLog('22:00 — intake closes. You need at least 2 healthy prisoners admitted.', 'warn');
+    // Schedule arrivals every game-hour from 17:00
+    scheduleArrivals();
+}
+
+function scheduleArrivals() {
+    // 6 arrivals across the shift: at 17, 18, 19, 20, 21 — 2 guaranteed healthy
+    const arrivalHours = [17, 18, 19, 20, 21];
+    const guaranteedHealthy = [0, 3]; // indices that are guaranteed healthy
+    intakeCurrentArrival = null;
+    let arrivalIndex = 0;
+
+    // We use a polling approach tied to the game clock
+    window._intakeArrivalHours = arrivalHours;
+    window._intakeGuaranteedHealthy = guaranteedHealthy;
+    window._intakeArrivalIndex = 0;
+    window._intakeArrivalCount = arrivalHours.length;
+}
+
+function checkIntakeArrivals(h) {
+    if (!intakeMode) return;
+    if (h >= 22) return; // intake closed
+    const hours = window._intakeArrivalHours || [];
+    const idx = window._intakeArrivalIndex || 0;
+    if (idx < hours.length && h >= hours[idx]) {
+        window._intakeArrivalIndex = idx + 1;
+        const isGuaranteedHealthy = (window._intakeGuaranteedHealthy || []).includes(idx);
+        spawnIntakeArrival(isGuaranteedHealthy);
+    }
+}
+
+function generateBiometrics(isHealthy, borderline) {
+    if (isHealthy) {
+        // Clearly healthy
+        return {
+            bpm: 62 + Math.floor(Math.random() * 30),    // 62-92
+            temp: (36.2 + Math.random() * 0.8).toFixed(1) // 36.2-37.0
+        };
+    } else if (borderline) {
+        // Ambiguous — slightly off normal, could go either way
+        return {
+            bpm: 98 + Math.floor(Math.random() * 12),    // 98-110 — elevated but not alarming
+            temp: (37.3 + Math.random() * 0.5).toFixed(1) // 37.3-37.8 — slightly high
+        };
+    } else {
+        // Clearly infected
+        return {
+            bpm: 115 + Math.floor(Math.random() * 40),   // 115-155
+            temp: (38.1 + Math.random() * 1.4).toFixed(1) // 38.1-39.5
+        };
+    }
+}
+
+function spawnIntakeArrival(guaranteedHealthy) {
+    if (intakeCurrentArrival) return; // one at a time
+    // Determine health status
+    const rand = Math.random();
+    let status, bio;
+    if (guaranteedHealthy) {
+        status = 'healthy';
+        bio = generateBiometrics(true, false);
+    } else if (rand < 0.35) {
+        status = 'infected';
+        bio = generateBiometrics(false, false);
+    } else if (rand < 0.55) {
+        status = 'borderline';
+        bio = generateBiometrics(false, true);
+    } else {
+        status = 'healthy';
+        bio = generateBiometrics(true, false);
+    }
+
+    const arrival = {
+        id: 800 + Math.floor(Math.random() * 90),
+        status,
+        bio,
+        name: ['Maren', 'Elias', 'Sela', 'Tobias', 'Rin', 'Dag', 'Cira', 'Vonn'][Math.floor(Math.random()*8)]
+    };
+    intakeCurrentArrival = arrival;
+
+    // Show subject at desk
+    document.getElementById('intake-subject').setAttribute('visible', 'true');
+    addLog(`New arrival at intake desk: Subject #${arrival.id}`, 'info');
+
+    // Start scan animation
+    startScan(arrival);
+}
+
+function startScan(arrival) {
+    intakeScanStep = 0;
+    document.getElementById('intake-bpm').textContent = '---';
+    document.getElementById('intake-temp').textContent = '--.-';
+    document.getElementById('intake-bpm-fill').style.width = '0%';
+    document.getElementById('intake-temp-fill').style.width = '0%';
+    document.getElementById('intake-scan-note').textContent = 'Scanning...';
+    document.getElementById('intake-decision').style.display = 'none';
+    document.getElementById('intake-waiting').style.display = 'block';
+
+    // Update arrival info panel
+    document.getElementById('intake-arrival-info').innerHTML =
+        `Subject #${arrival.id} &nbsp;|&nbsp; ${arrival.name}<br>` +
+        `Arrival time: ${String(getHour()).padStart(2,'0')}:00<br>` +
+        `Status: <span style="color:#ffaa44">SCANNING...</span>`;
+
+    // Animate scan over 3 seconds
+    clearInterval(intakeScanInterval);
+    intakeScanInterval = setInterval(() => {
+        intakeScanStep++;
+        // BPM counts up with some noise
+        const bpmProgress = Math.min(intakeScanStep / 12, 1);
+        const bpmNow = Math.round(arrival.bio.bpm * bpmProgress + (Math.random()-0.5)*8);
+        const tempNow = (arrival.bio.temp * Math.min(intakeScanStep/10, 1)).toFixed(1);
+
+        document.getElementById('intake-bpm').textContent = intakeScanStep > 3 ? bpmNow : '---';
+        document.getElementById('intake-temp').textContent = intakeScanStep > 5 ? tempNow : '--.-';
+
+        // Colour BPM
+        const bpmFinal = arrival.bio.bpm;
+        const bpmColor = bpmFinal > 110 ? '#ff4444' : bpmFinal > 95 ? '#ffaa44' : '#44ff44';
+        document.getElementById('intake-bpm').style.color = bpmColor;
+        document.getElementById('intake-bpm').style.textShadow = `0 0 10px ${bpmColor}`;
+        document.getElementById('intake-bpm-fill').style.background = bpmColor;
+        document.getElementById('intake-bpm-fill').style.width = `${Math.min(bpmFinal / 160 * 100, 100)}%`;
+
+        // Update 3D displays
+        const bpm3d = document.getElementById('bpm-3d-display');
+        const temp3d = document.getElementById('temp-3d-display');
+        if (bpm3d && intakeScanStep > 3) bpm3d.setAttribute('value', `BPM:${bpmNow}`);
+        if (temp3d && intakeScanStep > 5) temp3d.setAttribute('value', `${tempNow}C`);
+
+        // Colour temp
+        const tempFinal = parseFloat(arrival.bio.temp);
+        const tempColor = tempFinal > 38.0 ? '#ff4444' : tempFinal > 37.2 ? '#ffaa44' : '#44ff44';
+        document.getElementById('intake-temp').style.color = tempColor;
+        document.getElementById('intake-temp').style.textShadow = `0 0 10px ${tempColor}`;
+        document.getElementById('intake-temp-fill').style.background = tempColor;
+        document.getElementById('intake-temp-fill').style.width = `${Math.min((tempFinal - 35) / 5 * 100, 100)}%`;
+
+        if (intakeScanStep >= 14) {
+            clearInterval(intakeScanInterval);
+            finishScan(arrival);
+        }
+    }, 220);
+}
+
+function finishScan(arrival) {
+    const bpm = arrival.bio.bpm;
+    const temp = parseFloat(arrival.bio.temp);
+    let note = '';
+    if (bpm > 110 || temp > 38.0) {
+        note = '⚠ Readings outside normal parameters.';
+        document.getElementById('intake-scan-note').style.color = '#ff6666';
+    } else if (bpm > 95 || temp > 37.2) {
+        note = '⚠ Borderline readings. Use your judgment.';
+        document.getElementById('intake-scan-note').style.color = '#ffaa44';
+    } else {
+        note = '✓ Readings within normal range.';
+        document.getElementById('intake-scan-note').style.color = '#44ff44';
+    }
+    document.getElementById('intake-scan-note').textContent = note;
+    document.getElementById('intake-arrival-info').innerHTML =
+        `Subject #${arrival.id} &nbsp;|&nbsp; ${arrival.name}<br>` +
+        `BPM: <b>${bpm}</b> &nbsp; TEMP: <b>${temp}°C</b><br>` +
+        `<span style="color:#${bpm>110||temp>38?'ff4444':bpm>95||temp>37.2?'ffaa44':'44ff44'}">${note}</span>`;
+
+    document.getElementById('intake-decision').style.display = 'flex';
+    document.getElementById('intake-waiting').style.display = 'none';
+}
+
+function intakeDecision(admit) {
+    const arrival = intakeCurrentArrival;
+    if (!arrival) return;
+    intakeCurrentArrival = null;
+    document.getElementById('intake-subject').setAttribute('visible', 'false');
+    document.getElementById('intake-decision').style.display = 'none';
+    document.getElementById('intake-arrival-info').innerHTML = 'Awaiting next arrival...';
+    document.getElementById('intake-bpm').textContent = '---';
+    document.getElementById('intake-temp').textContent = '--.-';
+    document.getElementById('intake-scan-note').textContent = '';
+    const bpm3d = document.getElementById('bpm-3d-display');
+    const temp3d = document.getElementById('temp-3d-display');
+    if (bpm3d) bpm3d.setAttribute('value', 'BPM: ---');
+    if (temp3d) temp3d.setAttribute('value', 'TEMP: --.-');
+
+    if (admit) {
+        if (arrival.status === 'healthy' || arrival.status === 'borderline') {
+            // Borderline admitted — slight risk but not automatically bad
+            const logColor = arrival.status === 'borderline' ? '#ffaa44' : '#44ff44';
+            intakePrisoners.push({ id: arrival.id, name: arrival.name, status: arrival.status, cellIdx: intakePrisoners.length });
+            intakeCellCount++;
+            addLog(`#${arrival.id} admitted to cell ${intakeCellCount}.`, 'good');
+            intakeLog.push(`✓ #${arrival.id} ADMITTED — ${arrival.status}`);
+            if (arrival.status === 'borderline') {
+                intakeSickAdmitted += 0.5; // borderlines count as half
+            }
+        } else {
+            // Infected admitted — bad
+            intakeSickAdmitted++;
+            intakePrisoners.push({ id: arrival.id, name: arrival.name, status: 'infected', cellIdx: intakePrisoners.length, infected: true });
+            intakeCellCount++;
+            addLog(`#${arrival.id} admitted — readings were NOT normal. Infection risk.`, 'bad');
+            intakeLog.push(`⚠ #${arrival.id} ADMITTED (INFECTED)`);
+        }
+    } else {
+        addLog(`#${arrival.id} rejected.`, 'info');
+        intakeLog.push(`✗ #${arrival.id} REJECTED`);
+    }
+
+    // Update intake log display
+    document.getElementById('intake-log').innerHTML = [...intakeLog].reverse().map(l=>
+        `<div style="color:${l.startsWith('✓')?'#44aa44':l.startsWith('⚠')?'#ff8844':'#557755'}">${l}</div>`
+    ).join('');
+
+    renderIntakeBlock();
+}
+
+function renderIntakeBlock() {
+    const block = document.getElementById('cell-block');
+    block.innerHTML = '';
+    const totalCells = 20;
+    const cols = 5, rows = 4;
+    for (let i = 0; i < totalCells; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const side = col % 2 === 0 ? -1 : 1;
+        const xBase = (col - 2) * 16;
+        const zPos = -row * 18 - 10;
+        const p = intakePrisoners[i];
+        const cell = document.createElement('a-entity');
+        cell.setAttribute('position', `${xBase} 0 ${zPos}`);
+
+        // Simple cell walls
+        const wb = document.createElement('a-box');
+        wb.setAttribute('position', '0 5 -9'); wb.setAttribute('width','15'); wb.setAttribute('height','10'); wb.setAttribute('depth','0.5'); wb.setAttribute('color','#1a1a1a');
+        cell.appendChild(wb);
+        const wl = document.createElement('a-box');
+        wl.setAttribute('position','-7.5 5 -0.75'); wl.setAttribute('width','0.5'); wl.setAttribute('height','10'); wl.setAttribute('depth','16.5'); wl.setAttribute('color','#222');
+        cell.appendChild(wl);
+        const wr = document.createElement('a-box');
+        wr.setAttribute('position','7.5 5 -0.75'); wr.setAttribute('width','0.5'); wr.setAttribute('height','10'); wr.setAttribute('depth','16.5'); wr.setAttribute('color','#222');
+        cell.appendChild(wr);
+        for (let b = -7; b <= 7; b += 1.8) {
+            const bar = document.createElement('a-cylinder');
+            bar.setAttribute('radius','0.1'); bar.setAttribute('height','10'); bar.setAttribute('position',`${b} 5 7.5`); bar.setAttribute('color','#000');
+            cell.appendChild(bar);
+        }
+
+        if (p) {
+            // Show admitted prisoner
+            const isInfected = p.status === 'infected';
+            const fig = document.createElement('a-entity');
+            fig.setAttribute('position','0 0 2');
+            // Body
+            const body = document.createElement('a-box');
+            body.setAttribute('position','0 1.2 0'); body.setAttribute('width','0.6'); body.setAttribute('height','1.2'); body.setAttribute('depth','0.3');
+            body.setAttribute('color', isInfected ? '#3a0a0a' : '#2a3a2a');
+            fig.appendChild(body);
+            // Head
+            const head = document.createElement('a-sphere');
+            head.setAttribute('radius','0.22'); head.setAttribute('position','0 1.96 0'); head.setAttribute('color','#c8a878');
+            fig.appendChild(head);
+            // Infection indicator — slow red pulse on body if infected
+            if (isInfected) {
+                const glow = document.createElement('a-sphere');
+                glow.setAttribute('radius','0.5'); glow.setAttribute('position','0 1.2 0');
+                glow.setAttribute('color','#ff0000'); glow.setAttribute('material','opacity:0.08;transparent:true');
+                glow.setAttribute('animation','property:material.opacity;from:0.04;to:0.18;dir:alternate;dur:1200;loop:true');
+                fig.appendChild(glow);
+            }
+            cell.appendChild(fig);
+            // Label
+            const lbl = document.createElement('a-text');
+            lbl.setAttribute('value', `#${p.id}`); lbl.setAttribute('position','0 3 8'); lbl.setAttribute('align','center'); lbl.setAttribute('width','3');
+            lbl.setAttribute('color', isInfected ? '#ff4444' : '#44ff44');
+            cell.appendChild(lbl);
+        } else {
+            // Vacant
+            const vac = document.createElement('a-text');
+            vac.setAttribute('value','VACANT'); vac.setAttribute('position','0 3 8'); vac.setAttribute('align','center'); vac.setAttribute('width','2.5'); vac.setAttribute('color','#1a2a1a');
+            cell.appendChild(vac);
+        }
+        block.appendChild(cell);
+    }
+}
+
+function checkIntakeNight(h) {
+    if (!intakeMode) return;
+    if (h === 22 && currentPhase !== 'done') {
+        currentPhase = 'done';
+        // Count healthy admitted
+        const healthyCount = intakePrisoners.filter(p => p && p.status !== 'infected').length;
+        const dayIdx = intakeDayNum - 5;
+        const minRequired = INTAKE_MIN_HEALTHY[Math.min(dayIdx, INTAKE_MIN_HEALTHY.length-1)];
+
+        addLog(`22:00 — Intake closed. ${healthyCount} healthy prisoners admitted.`, 'info');
+
+        if (healthyCount < minRequired) {
+            setTimeout(() => doJumpscare('NOT ENOUGH HEALTHY PRISONERS', `Day ${intakeDayNum} required ${minRequired} healthy. You admitted ${healthyCount}. The block erupts.`), 1500);
+            return;
+        }
+
+        // Spread infection if any sick were admitted
+        if (intakeSickAdmitted >= 1) {
+            infectionLevel++;
+            addLog(`WARNING: ${Math.floor(intakeSickAdmitted)} infected prisoner(s) in block. Contagion risk tomorrow.`, 'bad');
+            const infWarn = document.getElementById('infection-warning');
+            infWarn.style.display = 'block';
+            infWarn.innerHTML = `⚠ INFECTION SPREADING<br>Level ${infectionLevel}<br>${Math.floor(intakeSickAdmitted)} source(s) in block<br>Contagion may spread overnight`;
+            // After 2 infection levels, spread to neighbours (visual indicator on cells)
+            if (infectionLevel >= 2) {
+                addLog('Infection is spreading to adjacent prisoners.', 'bad');
+                // Mark some random healthy prisoners as newly infected
+                const spreadTargets = intakePrisoners.filter(p => p && p.status !== 'infected');
+                const numToSpread = Math.min(infectionLevel - 1, spreadTargets.length);
+                for (let i = 0; i < numToSpread; i++) {
+                    spreadTargets[Math.floor(Math.random()*spreadTargets.length)].status = 'infected';
+                }
+                renderIntakeBlock();
+            }
+        }
+
+        // Advance to next day after 3 seconds
+        setTimeout(() => {
+            intakeDayNum++;
+            intakeSickAdmitted = 0;
+            judgedKill = 0; judgedFree = 0;
+            gameMinutes = 17 * 60;
+            currentPhase = 'inspect';
+            intakeLog = [];
+            window._intakeArrivalIndex = 0;
+            document.getElementById('intake-day-label').textContent = intakeDayNum;
+            document.getElementById('intake-log').innerHTML = '';
+            addLog(`Day ${intakeDayNum} begins.`, 'info');
+        }, 3000);
+    }
+}
+
+// ══════════════════════════════════════════════
+//  CLICK HANDLER
+// ══════════════════════════════════════════════
+document.querySelector('a-scene').addEventListener('click', e => {
+    const el = e.detail?.intersection?.object?.el;
+    if (!el) return;
+    const act = el.getAttribute('data-action');
+    const id  = el.getAttribute('data-id');
+
+    if (act === 'open-office') { openReport(); return; }
+    if (act === 'open-intake') { document.getElementById('intake-panel').style.display='block'; return; }
+    if (act === 'intake-admit') { intakeDecision(true); return; }
+    if (act === 'intake-reject') { intakeDecision(false); return; }
+    if (act === 'kill' || act === 'free') { handleJudgment(parseInt(id), act); }
+});
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+window.onload = () => {
+    for (let i = 0; i < 10; i++) prisoners.push(createPrisoner(i)); // Day 1-2: 10 cells
+    renderBlock();
+    updatePhase(17);
+    document.getElementById('phase-banner').style.display = 'block';
+    // Show briefing on load — player must click BEGIN SHIFT to start clock
+    document.getElementById('briefing-panel').style.display = 'flex';
+    // Clock starts when player dismisses briefing
+    document.querySelector('#briefing-panel button').addEventListener('click', () => {
+        setInterval(tick, 333); // 333ms per game-minute → 1 game-hour = 20s
+        addLog('17:00 — Your shift begins. Walk the cells. Judgment window opens at 21:00.', 'info');
+    });
+};
+
+// ══════════════════════════════════════════════
+//  VR SUPPORT
+// ══════════════════════════════════════════════
+let vrHudVisible = false;
+let inVR = false;
+let vrLogLines = ['', '', '', ''];
+
+// Detect VR entry/exit
+const scene = document.querySelector('a-scene');
+scene.addEventListener('enter-vr', () => {
+    inVR = true;
+    // Hide flat HTML overlays in VR — they don't work in immersive mode
+    document.getElementById('ui-layer').style.display = 'none';
+    addLog('VR mode active. Left menu button toggles HUD.', 'info');
+    updateVRHud();
+});
+scene.addEventListener('exit-vr', () => {
+    inVR = false;
+    document.getElementById('ui-layer').style.display = 'block';
+});
+
+// ── LEFT CONTROLLER — menu/X/Y buttons toggle HUD ──
+const leftCtrl = document.getElementById('left-ctrl');
+if (leftCtrl) {
+    // Oculus/Meta: X button = xbuttondown, menu = menudown
+    ['xbuttondown', 'ybuttondown', 'menudown', 'triggerdown'].forEach(evt => {
+        leftCtrl.addEventListener(evt, () => {
+            if (!inVR) return;
+            toggleVRHud();
+        });
+    });
+}
+
+function toggleVRHud() {
+    vrHudVisible = !vrHudVisible;
+    const hud = document.getElementById('vr-hud');
+    if (hud) {
+        hud.setAttribute('visible', vrHudVisible ? 'true' : 'false');
+        if (vrHudVisible) updateVRHud();
+    }
+}
+
+// ── RIGHT CONTROLLER — trigger fires click on raycasted element ──
+const rightCtrl = document.getElementById('right-ctrl');
+if (rightCtrl) {
+    rightCtrl.addEventListener('triggerdown', () => {
+        if (!inVR) return;
+        const raycaster = rightCtrl.components.raycaster;
+        if (!raycaster) return;
+        const intersections = raycaster.intersections;
+        if (intersections && intersections.length > 0) {
+            const hit = intersections[0].object.el;
+            if (hit) {
+                const act = hit.getAttribute('data-action');
+                const id  = hit.getAttribute('data-id');
+                if (act === 'open-office')  { openReportVR(); }
+                else if (act === 'open-intake') { openIntakeVR(); }
+                else if (act === 'intake-admit') { intakeDecision(true); }
+                else if (act === 'intake-reject'){ intakeDecision(false); }
+                else if (act === 'kill') { handleJudgment(parseInt(id), 'kill'); }
+                else if (act === 'free') { handleJudgment(parseInt(id), 'free'); }
+            }
+        }
+    });
+}
+
+// ── THUMBSTICK MOVEMENT ──
+// A-Frame's movement-controls doesn't work great in VR without the component,
+// so we register a simple thumbstick mover as a custom component
+AFRAME.registerComponent('vr-thumbstick-move', {
+    schema: { speed: { default: 0.08 } },
+    init() {
+        this.axes = [0, 0];
+        this.el.addEventListener('axismove', e => {
+            this.axes = e.detail.axis;
+        });
+        // Also listen on the rig directly for left controller axes
+        const lc = document.getElementById('left-ctrl');
+        if (lc) {
+            lc.addEventListener('axismove', e => {
+                this.axes = e.detail.axis;
+            });
+        }
+    },
+    tick(t, dt) {
+        if (!inVR) return;
+        const [, , x, y] = this.axes.length >= 4 ? this.axes : [0, 0, this.axes[0] || 0, this.axes[1] || 0];
+        if (Math.abs(x) < 0.15 && Math.abs(y) < 0.15) return; // dead zone
+        const camera = document.getElementById('head');
+        const rig = document.getElementById('rig');
+        if (!camera || !rig) return;
+        // Get camera yaw direction for forward/strafe
+        const camRot = camera.object3D.rotation.y + (rig.object3D.rotation.y || 0);
+        const speed = this.data.speed * (dt / 16);
+        const fx = Math.sin(camRot) * (-y) + Math.cos(camRot) * x;
+        const fz = Math.cos(camRot) * (-y) - Math.sin(camRot) * x; // note: negative for correct forward
+        // Negate z because forward in A-Frame is -z
+        const pos = rig.getAttribute('position');
+        rig.setAttribute('position', {
+            x: pos.x + fx * speed,
+            y: pos.y,
+            z: pos.z - fz * speed
+        });
+    }
+});
+// Attach thumbstick mover to rig
+document.addEventListener('DOMContentLoaded', () => {});
+// rig thumbstick init moved to combined loaded handler
+
+// ── VR HEAD-LOOK TURN (right thumbstick snap-turn optional) ──
+if (rightCtrl) {
+    let snapCooldown = false;
+    rightCtrl.addEventListener('axismove', e => {
+        if (!inVR || snapCooldown) return;
+        const ax = e.detail.axis[2] || e.detail.axis[0] || 0;
+        if (Math.abs(ax) > 0.7) {
+            const rig = document.getElementById('rig');
+            const cur = rig.object3D.rotation.y;
+            rig.object3D.rotation.y = cur + (ax > 0 ? -Math.PI/6 : Math.PI/6); // 30° snap
+            snapCooldown = true;
+            setTimeout(() => { snapCooldown = false; }, 350);
+        }
+    });
+}
+
+// ── VR HUD UPDATER ──
+function updateVRHud() {
+    if (!vrHudVisible) return;
+    const h = getHour();
+    const m = gameMinutes % 60;
+    const timeStr = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+
+    const setTxt = (id, val, col) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('value', val);
+        if (col) el.setAttribute('color', col);
+    };
+
+    setTxt('vr-clock', timeStr, '#ff4444');
+    setTxt('vr-day', `DAY ${day}`, '#c8b882');
+
+    const phaseTexts = {
+        inspect: 'INSPECT THE CELLS',
+        report:  'CHECK THE REPORT',
+        vote:    'JUDGMENT HOUR',
+        done:    'PROCESSING...'
+    };
+    const phaseColors = { inspect:'#88aacc', report:'#ccaa66', vote:'#ff6666', done:'#888' };
+    setTxt('vr-phase', phaseTexts[currentPhase] || '', phaseColors[currentPhase] || '#c8b882');
+    setTxt('vr-stats', `INTEL: ${intelLevel}  |  QUOTA: ${judgedKill+judgedFree}/2`, '#c8b882');
+
+    const voteStr = currentPhase === 'vote'
+        ? `EXEC: ${judgedKill}/1   REL: ${judgedFree}/1`
+        : (currentPhase === 'report' ? 'LOCKED until 21:00' : '');
+    setTxt('vr-vote', voteStr, currentPhase === 'vote' ? '#ff8888' : '#888');
+
+    // Log lines
+    const logEls = ['vr-log-0','vr-log-1','vr-log-2','vr-log-3'];
+    logEls.forEach((id, i) => {
+        setTxt(id, vrLogLines[i] || '', i === 0 ? '#c8b882' : i === 1 ? '#888' : i === 2 ? '#666' : '#444');
+    });
+}
+
+// Hook addLog to also update VR log lines
+const _origAddLog = addLog;
+// Patch addLog after it's defined — we wrap it below
+function patchVRLog() {
+    const origFn = window.addLog;
+    window.addLog = function(msg, type) {
+        origFn(msg, type);
+        // Push to VR log ring buffer
+        vrLogLines.unshift(msg.slice(0, 50));
+        vrLogLines = vrLogLines.slice(0, 4);
+        if (vrHudVisible) updateVRHud();
+    };
+}
+
+// ── VR REPORT/INTAKE — open as in-world 3D panel ──
+// In VR we can't show HTML overlays. Instead we show a large A-Frame plane with text.
+function openReportVR() {
+    if (!inVR) { openReport(); return; }
+    const h = getHour();
+    if (h < 19) { addLog('Report not available until 19:00.', 'warn'); return; }
+    // Build a simple VR report text on the HUD
+    let txt = `INTEL REPORT — DAY ${day}\n`;
+    txt += '─────────────────────────\n';
+    prisoners.forEach(p => {
+        if (!p.alive) return;
+        const pct = '??%'; // always hidden
+        txt += `#${p.id} ${p.claim.padEnd(10)} ${pct}\n`;
+        txt += `  "${p.story.slice(0,40)}"\n`;
+    });
+    // Show in VR HUD area — force HUD open with report content
+    vrHudVisible = true;
+    document.getElementById('vr-hud').setAttribute('visible', 'true');
+    document.getElementById('vr-hud-title').setAttribute('value', 'INTEL REPORT');
+    document.getElementById('vr-log-0').setAttribute('value', txt.slice(0,50));
+    document.getElementById('vr-log-1').setAttribute('value', txt.slice(50,100));
+    document.getElementById('vr-log-2').setAttribute('value', txt.slice(100,150));
+    document.getElementById('vr-log-3').setAttribute('value', txt.slice(150,200));
+    addLog('Report loaded in VR HUD.', 'info');
+}
+
+function openIntakeVR() {
+    if (!inVR) { document.getElementById('intake-panel').style.display='block'; return; }
+    addLog('Walk up to the desk. Use right trigger on ADMIT/REJECT buttons.', 'info');
+    toggleVRHud(); // show HUD with current scan state
+}
+
+// ── INIT VR LOG PATCHING on scene load ──
+// We do this via the scene loaded event so AFRAME is definitely ready
+scene.addEventListener('loaded', () => {
+    // Patch addLog to mirror to VR HUD
+    const origAddLog = window.addLog;
+    window.addLog = function(msg, type) {
+        origAddLog(msg, type);
+        vrLogLines.unshift(msg.slice(0, 50));
+        vrLogLines = vrLogLines.slice(0, 4);
+        if (inVR && vrHudVisible) updateVRHud();
+    };
+    // Attach thumbstick mover to rig
+    const rig = document.getElementById('rig');
+    if (rig) rig.setAttribute('vr-thumbstick-move', '');
+});
+
+
+</script>
+</body>
 </html>
